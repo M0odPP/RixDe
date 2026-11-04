@@ -117,7 +117,7 @@ export component SettingsWindow inherits Window {
     in-out property <string> active-theme-name: "FairyWren";
     in-out property <string> color-mode: "dark";
     callback select-theme-and-mode(string, string);
-    in property <bool> has-apply: root.active-tab == 0 || root.active-tab == 1 || root.active-tab == 2 || root.active-tab == 4 || root.active-tab == 6 || root.active-tab == 7 || root.active-tab == 10 || root.active-tab == 11 || root.active-tab == 12 || root.active-tab == 14 || root.active-tab == 16 || root.active-tab == 17;
+    in property <bool> has-apply: root.active-tab == 0 || root.active-tab == 1 || root.active-tab == 4 || root.active-tab == 6 || root.active-tab == 7 || root.active-tab == 10 || root.active-tab == 11 || root.active-tab == 12 || root.active-tab == 14 || root.active-tab == 16 || root.active-tab == 17;
 
     public function apply-current() {
         if root.active-tab == 0 {
@@ -891,8 +891,90 @@ export component SettingsWindow inherits Window {
                                 spacing: 16px;
                                 DisplayView {}
                                 if OutputPreferences.ready && !OutputPreferences.native: SettingsCard {
-                                    title: @tr("Manual display configuration");
-                                    subtitle: @tr("Configure custom resolution, refresh rate and display orientation");
+                                    title: @tr("Nested window display");
+                                    subtitle: @tr("Configure window resolution, refresh rate and display orientation");
+
+                                    HorizontalLayout {
+                                        spacing: 14px;
+                                        alignment: center;
+                                        padding-top: 6px;
+                                        padding-bottom: 6px;
+
+                                        Rectangle {
+                                            min-width: 220px;
+                                            max-width: 320px;
+                                            height: 120px;
+                                            border-radius: Theme.radius-md;
+                                            background: Theme.surface-active;
+                                            border-width: 2px;
+                                            border-color: Theme.accent;
+                                            clip: true;
+
+                                            VerticalLayout {
+                                                padding: 12px;
+                                                spacing: 8px;
+                                                alignment: space-between;
+
+                                                HorizontalLayout {
+                                                    alignment: space-between;
+
+                                                    Rectangle {
+                                                        width: 24px;
+                                                        height: 24px;
+                                                        border-radius: 12px;
+                                                        background: Theme.accent;
+                                                        Text {
+                                                            text: "1";
+                                                            color: #ffffff;
+                                                            font-size: 12px;
+                                                            font-weight: 700;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+
+                                                    Rectangle {
+                                                        border-radius: 4px;
+                                                        background: Theme.control-surface;
+                                                        border-width: 1px;
+                                                        border-color: Theme.control-border;
+                                                        HorizontalLayout {
+                                                            padding-left: 6px;
+                                                            padding-right: 6px;
+                                                            padding-top: 2px;
+                                                            padding-bottom: 2px;
+                                                            Text {
+                                                                text: @tr("Nested window");
+                                                                color: Theme.accent;
+                                                                font-size: 11px;
+                                                                font-weight: 600;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                VerticalLayout {
+                                                    spacing: 2px;
+                                                    Text {
+                                                        text: "nested-1 · " + @tr("Virtual display");
+                                                        color: Theme.text-primary;
+                                                        font-size: 13px;
+                                                        font-weight: 600;
+                                                        overflow: elide;
+                                                    }
+                                                    Text {
+                                                        text: root.display-width + "×" + root.display-height + " @ " + root.display-hz + "Hz";
+                                                        color: Theme.text-secondary;
+                                                        font-size: 11px;
+                                                        overflow: elide;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    SettingsDivider {}
+
                                     SettingsRow {
                                         title: @tr("Resolution");
                                         subtitle: @tr("Display width and height in pixels");
@@ -912,8 +994,25 @@ export component SettingsWindow inherits Window {
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Flip display");
-                                        subtitle: @tr("Invert the display orientation 180 degrees");
+                                        subtitle: @tr("Invert orientation 180 degrees");
                                         ToggleSwitch { checked <=> root.display-flipped; }
+                                    }
+
+                                    SettingsDivider {}
+
+                                    HorizontalLayout {
+                                        alignment: end;
+                                        padding-top: 4px;
+                                        padding-bottom: 4px;
+
+                                        RixButton {
+                                            text: @tr("Apply display settings");
+                                            primary: true;
+                                            enabled: !root.busy;
+                                            clicked => {
+                                                root.apply-display(root.display-width, root.display-height, root.display-hz, root.display-flipped);
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1130,61 +1229,45 @@ export component SettingsWindow inherits Window {
                 spacing: 0px;
                 vertical-stretch: 0;
 
-                Rectangle { height: 1px; background: Theme.divider; }
+                if root.has-apply || root.status-message != "": Rectangle { height: 1px; background: Theme.divider; }
 
-                Rectangle {
+                if root.has-apply || root.status-message != "": Rectangle {
                     height: 56px;
                     background: Theme.surface;
 
                     HorizontalLayout {
-                        alignment: center;
                         padding-left: 32px;
                         padding-right: 32px;
 
-                        Rectangle {
-                            max-width: 960px;
-                            horizontal-stretch: 1;
-                            background: transparent;
-
-                            HorizontalLayout {
-                                alignment: space-between;
-
-                                VerticalLayout {
-                                    horizontal-stretch: 1;
-                                    alignment: center;
-                                    if root.status-message != "": HorizontalLayout {
-                                        spacing: 8px;
-                                        alignment: start;
-                                        Rectangle {
-                                            width: 8px; height: 8px; border-radius: 4px;
-                                            background: Theme.accent;
-                                            y: (parent.height - self.height) / 2;
-                                        }
-                                        Text {
-                                            text: root.status-message;
-                                            color: Theme.text-primary;
-                                            font-size: 13px;
-                                            font-weight: 500;
-                                            overflow: elide;
-                                            vertical-alignment: center;
-                                        }
-                                    }
-                                }
-
-                                if root.has-apply: VerticalLayout {
-                                    horizontal-stretch: 0;
-                                    alignment: center;
-
-                                    RixButton {
-                                        text: @tr("Apply");
-                                        primary: true;
-                                        height: 36px;
-                                        min-width: 104px;
-                                        enabled: !root.busy;
-                                        clicked => { root.apply-current(); }
-                                    }
-                                }
+                        if root.status-message != "": HorizontalLayout {
+                            alignment: start;
+                            spacing: 8px;
+                            Rectangle {
+                                width: 8px; height: 8px; border-radius: 4px;
+                                background: Theme.accent;
+                                y: (parent.height - self.height) / 2;
                             }
+                            Text {
+                                text: root.status-message;
+                                color: Theme.text-primary;
+                                font-size: 13px;
+                                font-weight: 500;
+                                overflow: elide;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        Rectangle {
+                            horizontal-stretch: 1;
+                        }
+
+                        if root.has-apply: RixButton {
+                            text: @tr("Apply");
+                            primary: true;
+                            height: 36px;
+                            min-width: 104px;
+                            enabled: !root.busy;
+                            clicked => { root.apply-current(); }
                         }
                     }
                 }

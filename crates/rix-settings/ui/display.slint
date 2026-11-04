@@ -65,7 +65,6 @@ export component DisplayView inherits Rectangle {
         spacing: 16px;
 
         if !OutputPreferences.ready && OutputPreferences.error == "": Label { text: @tr("Loading displays…"); }
-        if OutputPreferences.ready && !OutputPreferences.native: Label { text: @tr("Nested session window size"); }
         if OutputPreferences.ready && OutputPreferences.native && OutputPreferences.outputs.length == 0: Label { text: @tr("No displays connected"); }
 
         if OutputPreferences.ready && OutputPreferences.native && OutputPreferences.outputs.length > 0: SettingsCard {
