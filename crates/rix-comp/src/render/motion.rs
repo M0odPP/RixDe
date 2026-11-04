@@ -186,7 +186,6 @@ impl Motion {
                     .get_mut(id)
                     .filter(|entry| !entry.surfaces.is_empty())
                 {
-
                     entry.closed = None;
 
                     entry.opening = false;
@@ -231,7 +230,6 @@ impl Motion {
             alive.insert(*id);
             let surfaces: Vec<WaylandSurfaceRenderElement<GlesRenderer>> = window.render_elements(
                 renderer,
-
                 (location - window.geometry().loc - output_geo.loc)
                     .to_physical_precise_round(scale),
                 scale.into(),
@@ -669,7 +667,6 @@ mod tests {
         window.0.commit();
         desktop.roundtrip();
         let id = desktop.inspect(|state| {
-
             state.animation_duration = 0;
             state.windows.entries[0].0
         });

@@ -280,7 +280,6 @@ impl RixState {
         let xdg_foreign_state =
             smithay::wayland::xdg_foreign::XdgForeignState::new::<Self>(&display_handle);
         if greeter_mode {
-
             display_handle.remove_global::<Self>(xdg_foreign_state.exporter_global());
             display_handle.remove_global::<Self>(xdg_foreign_state.importer_global());
         }
@@ -301,7 +300,6 @@ impl RixState {
         let seat = seat_state.new_wl_seat(&display_handle, "rix-seat-0");
         let data_device_state = DataDeviceState::new::<Self>(&display_handle);
         if greeter_mode {
-
             display_handle.remove_global::<Self>(data_device_state.global());
         }
         let relative_pointer_manager =
@@ -500,7 +498,6 @@ impl RixState {
             .iter()
             .find(|(_, known)| known == window)
         {
-
             theme.with_maximized(
                 self.windows
                     .pending_placement
@@ -547,7 +544,6 @@ impl RixState {
         self.server_side_decorations = enabled;
         for (id, window) in &self.windows.entries {
             if let Some(toplevel) = window.toplevel() {
-
                 if self.kde_decorations.contains_key(toplevel.wl_surface()) {
                     continue;
                 }
@@ -1026,7 +1022,6 @@ impl RixState {
         let pointer_client = surface.client().map(|client| client.id());
         let keyboard_focus_matches = pointer_client.is_some() && pointer_client == keyboard_client;
         if !keyboard_focus_matches {
-
             smithay::wayland::pointer_constraints::with_pointer_constraint(
                 &surface,
                 &pointer,
@@ -1273,6 +1268,18 @@ impl RixState {
 }
 
 impl RixState {
+    pub(crate) fn primary_output(&self) -> Option<Output> {
+        let outputs: Vec<_> = self.space.outputs().cloned().collect();
+        for output in &outputs {
+            if let Some(profile) = crate::output_control::profile(output) {
+                if profile.primary {
+                    return Some(output.clone());
+                }
+            }
+        }
+        outputs.first().cloned()
+    }
+
     pub fn work_area(&self, output: &Output) -> smithay::utils::Rectangle<i32, Logical> {
         let mut area = layer_map_for_output(output).non_exclusive_zone();
         if let Some(geometry) = self.space.output_geometry(output) {

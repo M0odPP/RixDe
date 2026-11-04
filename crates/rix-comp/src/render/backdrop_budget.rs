@@ -101,7 +101,6 @@ impl<E: Element> Element for Budgeted<E> {
         scale: Scale<f64>,
         commit: Option<CommitCounter>,
     ) -> DamageSet<i32, Physical> {
-
         if commit == Some(self.commit) {
             DamageSet::default()
         } else {

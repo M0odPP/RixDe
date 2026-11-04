@@ -151,10 +151,9 @@ pub fn run_nested(
     output.set_preferred(output_mode);
 
     output.user_data().insert_if_missing(|| {
-        crate::output_control::Placement(std::sync::Mutex::new(Some(rix_config::OutputPosition {
-            x: 0,
-            y: 0,
-        })))
+        let placement = crate::output_control::Placement::default();
+        *placement.position.lock().unwrap() = Some(rix_config::OutputPosition { x: 0, y: 0 });
+        placement
     });
     state.space.map_output(&output, (0, 0));
 
@@ -212,173 +211,169 @@ pub fn run_nested(
     handle
         .insert_source(
             winit_event_loop,
-            move |event, &mut (), state: &mut RixState| {
-                match event {
-                    WinitEvent::Resized { size, .. } => {
-                        last_host_pointer = None;
-                        let pending = state.pending_display_mode.take();
-                        let requested_size_reached = pending.as_ref().is_some_and(|(cmd, _)| {
-                            cmd.width == size.w as u32 && cmd.height == size.h as u32
-                        });
-                        let refresh = if requested_size_reached {
-                            pending.as_ref().unwrap().0.refresh_hz as i32 * 1000
-                        } else {
-                            output_clone
-                                .current_mode()
-                                .map(|m| m.refresh)
-                                .unwrap_or(60_000)
-                        };
-                        let mode = Mode {
-                            size: Size::from((size.w, size.h)),
-                            refresh,
-                        };
+            move |event, &mut (), state: &mut RixState| match event {
+                WinitEvent::Resized { size, .. } => {
+                    last_host_pointer = None;
+                    let pending = state.pending_display_mode.take();
+                    let requested_size_reached = pending.as_ref().is_some_and(|(cmd, _)| {
+                        cmd.width == size.w as u32 && cmd.height == size.h as u32
+                    });
+                    let refresh = if requested_size_reached {
+                        pending.as_ref().unwrap().0.refresh_hz as i32 * 1000
+                    } else {
+                        output_clone
+                            .current_mode()
+                            .map(|m| m.refresh)
+                            .unwrap_or(60_000)
+                    };
+                    let mode = Mode {
+                        size: Size::from((size.w, size.h)),
+                        refresh,
+                    };
 
-                        let current_transform = output_clone.current_transform();
-                        output_clone.change_current_state(
-                            Some(mode),
-                            Some(current_transform),
-                            None,
-                            None,
-                        );
-                        state.reflow_output_layout();
-                        if let Some((cmd, _)) = pending {
-                            if requested_size_reached {
-                                let _ = cmd.responder.send(Ok(()));
-                            } else {
-                                let _ = cmd.responder.send(Err(format!(
-                                    "Host window resized to {}x{} instead of requested {}x{}",
-                                    size.w, size.h, cmd.width, cmd.height
-                                )));
-                            }
+                    let current_transform = output_clone.current_transform();
+                    output_clone.change_current_state(
+                        Some(mode),
+                        Some(current_transform),
+                        None,
+                        None,
+                    );
+                    state.reflow_output_layout();
+                    if let Some((cmd, _)) = pending {
+                        if requested_size_reached {
+                            let _ = cmd.responder.send(Ok(()));
+                        } else {
+                            let _ = cmd.responder.send(Err(format!(
+                                "Host window resized to {}x{} instead of requested {}x{}",
+                                size.w, size.h, cmd.width, cmd.height
+                            )));
                         }
-                        if !requested_size_reached {
-                            let mut actual_display = config_for_resize.get_display();
-                            if actual_display.width != size.w as u32
-                                || actual_display.height != size.h as u32
-                            {
-                                actual_display.width = size.w as u32;
-                                actual_display.height = size.h as u32;
-                                if let Err(err) = config_for_resize.save_display(actual_display) {
-                                    tracing::warn!("Could not save host window dimensions: {err}");
-                                }
+                    }
+                    if !requested_size_reached {
+                        let mut actual_display = config_for_resize.get_display();
+                        if actual_display.width != size.w as u32
+                            || actual_display.height != size.h as u32
+                        {
+                            actual_display.width = size.w as u32;
+                            actual_display.height = size.h as u32;
+                            if let Err(err) = config_for_resize.save_display(actual_display) {
+                                tracing::warn!("Could not save host window dimensions: {err}");
                             }
                         }
                     }
+                }
 
-                    WinitEvent::Input(_) if fixture_input_enabled => {}
-                    WinitEvent::Input(input_event) => match input_event {
-                        smithay::backend::input::InputEvent::PointerMotionAbsolute { event } => {
-                            use smithay::backend::input::{AbsolutePositionEvent, Event};
+                WinitEvent::Input(_) if fixture_input_enabled => {}
+                WinitEvent::Input(input_event) => match input_event {
+                    smithay::backend::input::InputEvent::PointerMotionAbsolute { event } => {
+                        use smithay::backend::input::{AbsolutePositionEvent, Event};
 
-                            let output_scale = output_clone.current_scale().integer_scale();
-                            let output_geo = output_clone
-                                .current_mode()
-                                .map(|m| m.size.to_logical(output_scale))
-                                .unwrap_or_else(|| (1280, 720).into());
-                            let raw_pos = event.position_transformed(output_geo);
+                        let output_scale = output_clone.current_scale().integer_scale();
+                        let output_geo = output_clone
+                            .current_mode()
+                            .map(|m| m.size.to_logical(output_scale))
+                            .unwrap_or_else(|| (1280, 720).into());
+                        let raw_pos = event.position_transformed(output_geo);
 
-                            let pos = if output_clone.current_transform() == Transform::Flipped180 {
-                                smithay::utils::Point::from((
-                                    output_geo.w as f64 - raw_pos.x,
-                                    output_geo.h as f64 - raw_pos.y,
-                                ))
-                            } else {
-                                raw_pos
-                            };
-                            let serial = smithay::utils::SERIAL_COUNTER.next_serial();
-                            let previous = last_host_pointer.replace(pos);
-                            if let Some(pointer) = state.seat.get_pointer() {
-                                if state.pointer_is_locked() {
-                                    if let Some(previous) = previous {
-                                        let delta = pos - previous;
-                                        pointer.relative_motion(
-                                            state,
-                                            state.surface_under(pointer.current_location()),
-                                            &smithay::input::pointer::RelativeMotionEvent {
-                                                delta,
-                                                delta_unaccel: delta,
-                                                utime: event.time(),
-                                            },
-                                        );
-                                    }
-                                } else {
-                                    let pos = state.constrain_pointer_location(pos);
-                                    let under = state.surface_under(pos);
-                                    pointer.motion(
+                        let pos = if output_clone.current_transform() == Transform::Flipped180 {
+                            smithay::utils::Point::from((
+                                output_geo.w as f64 - raw_pos.x,
+                                output_geo.h as f64 - raw_pos.y,
+                            ))
+                        } else {
+                            raw_pos
+                        };
+                        let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                        let previous = last_host_pointer.replace(pos);
+                        if let Some(pointer) = state.seat.get_pointer() {
+                            if state.pointer_is_locked() {
+                                if let Some(previous) = previous {
+                                    let delta = pos - previous;
+                                    pointer.relative_motion(
                                         state,
-                                        under,
-                                        &smithay::input::pointer::MotionEvent {
-                                            location: pos,
-                                            serial,
-                                            time: event.time_msec(),
+                                        state.surface_under(pointer.current_location()),
+                                        &smithay::input::pointer::RelativeMotionEvent {
+                                            delta,
+                                            delta_unaccel: delta,
+                                            utime: event.time(),
                                         },
                                     );
-                                    state.update_pointer_constraint();
                                 }
-                                pointer.frame(state);
-                                let _ = state.display_handle.flush_clients();
+                            } else {
+                                let pos = state.constrain_pointer_location(pos);
+                                let under = state.surface_under(pos);
+                                pointer.motion(
+                                    state,
+                                    under,
+                                    &smithay::input::pointer::MotionEvent {
+                                        location: pos,
+                                        serial,
+                                        time: event.time_msec(),
+                                    },
+                                );
+                                state.update_pointer_constraint();
                             }
-                        }
-                        smithay::backend::input::InputEvent::PointerButton { event } => {
-                            use smithay::backend::input::{Event, PointerButtonEvent};
-                            let serial = smithay::utils::SERIAL_COUNTER.next_serial();
-                            state.handle_pointer_button(
-                                event.button_code(),
-                                event.state(),
-                                serial,
-                                event.time_msec(),
-                            );
+                            pointer.frame(state);
                             let _ = state.display_handle.flush_clients();
                         }
-                        smithay::backend::input::InputEvent::PointerAxis { event } => {
-                            use smithay::backend::input::{
-                                Axis, AxisSource, Event, PointerAxisEvent,
-                            };
-                            if let Some(pointer) = state.seat.get_pointer() {
-                                let mut frame =
-                                    smithay::input::pointer::AxisFrame::new(event.time_msec())
-                                        .source(event.source());
-                                for axis in [Axis::Horizontal, Axis::Vertical] {
-                                    if let Some(value) = event.amount(axis) {
-                                        frame = frame.value(axis, value);
-                                        if event.source() == AxisSource::Finger && value == 0.0 {
-                                            frame = frame.stop(axis);
-                                        }
+                    }
+                    smithay::backend::input::InputEvent::PointerButton { event } => {
+                        use smithay::backend::input::{Event, PointerButtonEvent};
+                        let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                        state.handle_pointer_button(
+                            event.button_code(),
+                            event.state(),
+                            serial,
+                            event.time_msec(),
+                        );
+                        let _ = state.display_handle.flush_clients();
+                    }
+                    smithay::backend::input::InputEvent::PointerAxis { event } => {
+                        use smithay::backend::input::{Axis, AxisSource, Event, PointerAxisEvent};
+                        if let Some(pointer) = state.seat.get_pointer() {
+                            let mut frame =
+                                smithay::input::pointer::AxisFrame::new(event.time_msec())
+                                    .source(event.source());
+                            for axis in [Axis::Horizontal, Axis::Vertical] {
+                                if let Some(value) = event.amount(axis) {
+                                    frame = frame.value(axis, value);
+                                    if event.source() == AxisSource::Finger && value == 0.0 {
+                                        frame = frame.stop(axis);
                                     }
-                                    if let Some(v120) = event.amount_v120(axis) {
-                                        frame = frame.v120(axis, v120.round() as i32);
-                                    }
-                                    frame = frame
-                                        .relative_direction(axis, event.relative_direction(axis));
                                 }
-                                pointer.axis(state, frame);
-                                pointer.frame(state);
-                                let _ = state.display_handle.flush_clients();
+                                if let Some(v120) = event.amount_v120(axis) {
+                                    frame = frame.v120(axis, v120.round() as i32);
+                                }
+                                frame =
+                                    frame.relative_direction(axis, event.relative_direction(axis));
                             }
-                        }
-                        smithay::backend::input::InputEvent::Keyboard { event } => {
-                            use smithay::backend::input::{Event, KeyboardKeyEvent};
-                            let serial = smithay::utils::SERIAL_COUNTER.next_serial();
-                            let time = event.time_msec();
-                            state.handle_keyboard_key(
-                                event.key_code(),
-                                event.state(),
-                                serial,
-                                time,
-                                true,
-                            );
+                            pointer.axis(state, frame);
+                            pointer.frame(state);
                             let _ = state.display_handle.flush_clients();
                         }
-                        _ => {}
-                    },
-                    WinitEvent::CloseRequested => {
-                        info!("Nested window close requested. Exiting compositor.");
-                        state
-                            .running
-                            .store(false, std::sync::atomic::Ordering::SeqCst);
+                    }
+                    smithay::backend::input::InputEvent::Keyboard { event } => {
+                        use smithay::backend::input::{Event, KeyboardKeyEvent};
+                        let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                        let time = event.time_msec();
+                        state.handle_keyboard_key(
+                            event.key_code(),
+                            event.state(),
+                            serial,
+                            time,
+                            true,
+                        );
+                        let _ = state.display_handle.flush_clients();
                     }
                     _ => {}
+                },
+                WinitEvent::CloseRequested => {
+                    info!("Nested window close requested. Exiting compositor.");
+                    state
+                        .running
+                        .store(false, std::sync::atomic::Ordering::SeqCst);
                 }
+                _ => {}
             },
         )
         .map_err(|e| anyhow::anyhow!("Failed to register winit event source: {:?}", e))?;
@@ -750,7 +745,6 @@ pub fn run_nested(
                 .map(|(damage, _)| damage.is_some())
                 .unwrap_or(true);
             if !changed {
-
                 restore_scene(&mut last_scene, &mut render_elements);
                 mark(heartbeat.as_ref(), Phase::FrameCallbacks);
                 state.send_frame_callbacks(&output, state.start_time.elapsed());
@@ -865,7 +859,6 @@ fn restore_scene(
 }
 
 fn nested_damage_tracker(output: &Output) -> OutputDamageTracker {
-
     let size = output
         .current_mode()
         .map(|mode| mode.size)

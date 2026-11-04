@@ -35,12 +35,24 @@ pub(crate) fn profile(output: &Output) -> Option<OutputProfile> {
         position: output
             .user_data()
             .get::<Placement>()
-            .and_then(|p| *p.0.lock().unwrap()),
+            .and_then(|p| *p.position.lock().unwrap()),
+        mirror_of: output
+            .user_data()
+            .get::<Placement>()
+            .and_then(|p| p.mirror_of.lock().unwrap().clone()),
+        primary: output
+            .user_data()
+            .get::<Placement>()
+            .is_some_and(|p| *p.primary.lock().unwrap()),
     })
 }
 
 #[derive(Default)]
-pub(crate) struct Placement(pub std::sync::Mutex<Option<rix_config::OutputPosition>>);
+pub(crate) struct Placement {
+    pub position: std::sync::Mutex<Option<rix_config::OutputPosition>>,
+    pub mirror_of: std::sync::Mutex<Option<String>>,
+    pub primary: std::sync::Mutex<bool>,
+}
 
 pub(crate) fn transform(profile: &OutputProfile) -> Transform {
     match (profile.rotation, profile.flipped) {
@@ -70,7 +82,7 @@ pub(crate) fn saved_profile(
         .outputs
         .get(&identity(output))
         .or_else(|| settings.outputs.get(&output.name()))
-        .copied()
+        .cloned()
 }
 
 pub(crate) fn snapshot<'a>(
@@ -188,7 +200,7 @@ mod tests {
         let now = Instant::now();
         let output = output();
         let profile = profile(&output).unwrap();
-        let mut trial = Trial::new(8, output, profile, profile, now);
+        let mut trial = Trial::new(8, output, profile.clone(), profile, now);
         assert!(!trial.can_confirm(7, now));
         assert!(trial.can_confirm(8, now + Duration::from_secs(14)));
         assert!(!trial.can_confirm(8, now + CONFIRM_TIMEOUT));
@@ -223,7 +235,8 @@ mod tests {
         std::thread::scope(|scope| {
             for name in ["DP-test", "HDMI-test"] {
                 let config = config.clone();
-                scope.spawn(move || config.save_output_profile(name.into(), profile).unwrap());
+                let prof = profile.clone();
+                scope.spawn(move || config.save_output_profile(name.into(), prof).unwrap());
             }
         });
         let saved = config.get_display();
@@ -253,7 +266,7 @@ mod tests {
                     .user_data()
                     .get::<Placement>()
                     .unwrap()
-                    .0
+                    .position
                     .lock()
                     .unwrap() = expected.position;
                 output.change_current_state(
@@ -272,7 +285,7 @@ mod tests {
         assert_eq!(legacy.scale_percent, 100);
         assert_eq!(legacy.rotation, 0);
         assert_eq!(transform(&legacy), Transform::Flipped180);
-        let mut invalid = legacy;
+        let mut invalid = legacy.clone();
         invalid.scale_percent = 0;
         assert!(invalid.validate().is_err());
         invalid = legacy;
@@ -285,7 +298,9 @@ mod tests {
         let output = output();
         let mut settings = rix_config::DisplaySettings::default();
         let connector_profile = profile(&output).unwrap();
-        settings.outputs.insert(output.name(), connector_profile);
+        settings
+            .outputs
+            .insert(output.name(), connector_profile.clone());
         output
             .user_data()
             .insert_if_missing(|| crate::monitor::Monitor {
@@ -293,10 +308,15 @@ mod tests {
                 model: "Test".into(),
                 identity: Some("edid:ABC:0042:n1".into()),
             });
-        assert_eq!(saved_profile(&output, &settings), Some(connector_profile));
+        assert_eq!(
+            saved_profile(&output, &settings),
+            Some(connector_profile.clone())
+        );
         let mut monitor_profile = connector_profile;
         monitor_profile.scale_percent = 150;
-        settings.outputs.insert(identity(&output), monitor_profile);
+        settings
+            .outputs
+            .insert(identity(&output), monitor_profile.clone());
         assert_eq!(saved_profile(&output, &settings), Some(monitor_profile));
     }
 
@@ -333,10 +353,10 @@ mod tests {
     fn snapshot_reports_the_seeded_placement() {
         let output = output();
         output.user_data().insert_if_missing(|| {
-            Placement(std::sync::Mutex::new(Some(rix_config::OutputPosition {
-                x: 1920,
-                y: -120,
-            })))
+            let placement = Placement::default();
+            *placement.position.lock().unwrap() =
+                Some(rix_config::OutputPosition { x: 1920, y: -120 });
+            placement
         });
         let state = snapshot([&output].into_iter(), false, None);
         assert_eq!(

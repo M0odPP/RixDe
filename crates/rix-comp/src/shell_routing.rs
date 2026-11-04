@@ -3,9 +3,11 @@ use rix_ipc::{IpcEvent, ShellEvent};
 
 impl RixState {
     pub(crate) fn refresh_shell_targets(&mut self, layout: &rix_config::LayoutConfig) {
+        let primary = self.primary_output().map(|o| o.name());
         self.shell_targets = rix_config::panel_targets(
             layout,
             &self.space.outputs().map(|o| o.name()).collect::<Vec<_>>(),
+            primary.as_deref(),
         );
         self.launcher_panels = layout
             .panels
@@ -20,8 +22,9 @@ impl RixState {
     }
     pub(crate) fn shell_output(&self) -> Option<String> {
         let pointer = self.seat.get_pointer().map(|p| p.current_location());
-        self.space
-            .outputs()
+        let outputs: Vec<_> = self.space.outputs().cloned().collect();
+        outputs
+            .into_iter()
             .find(|o| {
                 pointer.is_some_and(|p| {
                     self.space
@@ -29,7 +32,7 @@ impl RixState {
                         .is_some_and(|g| g.to_f64().contains(p))
                 })
             })
-            .or_else(|| self.space.outputs().next())
+            .or_else(|| self.primary_output())
             .map(|o| o.name())
     }
     pub(crate) fn publish_shell(&self, output: Option<&str>, event: ShellEvent) {
@@ -37,7 +40,6 @@ impl RixState {
             return;
         };
         if self.shell_targets.is_empty() {
-
             let event = match event {
                 ShellEvent::LauncherToggle => IpcEvent::LauncherToggleRequested,
                 ShellEvent::LauncherSet(open) => IpcEvent::LauncherToggled(open),

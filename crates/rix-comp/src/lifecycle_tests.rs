@@ -518,7 +518,6 @@ impl Drop for TestDesktop {
     fn drop(&mut self) {
         self.done.store(true, Ordering::Relaxed);
         if let Some(thread) = self.thread.take() {
-
             let deadline = Instant::now() + Duration::from_millis(100);
             while !thread.is_finished() && Instant::now() < deadline {
                 std::thread::sleep(Duration::from_millis(1));

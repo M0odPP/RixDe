@@ -58,7 +58,6 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
-
     pub fn init() -> Result<Self, ConfigError> {
         let has_config_home =
             std::env::var_os("XDG_CONFIG_HOME").is_some_and(|path| !path.is_empty());
@@ -548,6 +547,16 @@ impl ConfigManager {
     ) -> Result<(), ConfigError> {
         let _save_guard = self.save_lock.lock().unwrap();
         let mut display = self.get_display();
+        if profile.primary {
+            display.primary_output = Some(output.clone());
+            for (key, p) in display.outputs.iter_mut() {
+                if key != &output {
+                    p.primary = false;
+                }
+            }
+        } else if display.primary_output.as_ref() == Some(&output) {
+            display.primary_output = None;
+        }
         display.outputs.insert(output, profile);
         self.write_display(display)
     }
@@ -565,7 +574,6 @@ impl ConfigManager {
     }
 
     fn write_display(&self, display: DisplaySettings) -> Result<(), ConfigError> {
-
         let _disk_guard = AppearanceLock::acquire(&self.config_dir)?;
         recover_appearance(&self.config_dir)?;
         self.write_display_locked(display)
@@ -641,7 +649,6 @@ impl ConfigManager {
         base: &DesktopSettings,
         updated: &DesktopSettings,
     ) -> Result<DesktopSettings, ConfigError> {
-
         let _guard = self.save_lock.lock().unwrap();
         let _disk_guard = AppearanceLock::acquire(&self.config_dir)?;
         recover_appearance(&self.config_dir)?;
@@ -747,7 +754,6 @@ enum Document {
 }
 
 impl DocumentPaths {
-
     fn classify(&self, path: &Path) -> Option<Document> {
         if path.parent() != Some(self.config_dir.as_path()) {
             return None;
@@ -763,7 +769,6 @@ impl DocumentPaths {
 }
 
 enum ReloadOutcome {
-
     Done,
 
     Deferred,
@@ -787,11 +792,9 @@ impl DebounceWorker {
         let thread = std::thread::Builder::new()
             .name("rix-config-reload".into())
             .spawn(move || {
-
                 let mut pending: Vec<PathBuf> = Vec::new();
                 let mut deadline: Option<Instant> = None;
                 while !thread_shutdown.load(Ordering::Acquire) {
-
                     let wait = deadline
                         .map(|fire_at| fire_at.saturating_duration_since(Instant::now()))
                         .unwrap_or(WORKER_POLL)
@@ -800,7 +803,6 @@ impl DebounceWorker {
                     match receiver.recv_timeout(wait) {
                         Ok(path) => {
                             if deadline.is_none() {
-
                                 deadline = Some(Instant::now() + window);
                             }
                             if !pending.contains(&path) {
@@ -891,7 +893,6 @@ impl ReloadHandler {
             Ok(Some(guard)) => guard,
             Ok(None) => {
                 if !self.deferred {
-
                     warn!(
                         "Appearance lock is held by another process; retrying the configuration reload until it is released"
                     );
@@ -1192,7 +1193,6 @@ impl CorruptLog {
         content: Option<&[u8]>,
     ) -> Result<Option<PathBuf>, ConfigError> {
         match content {
-
             Some(bytes) => {
                 if let Some(existing) = identical_backup(path, bytes)? {
                     return Ok(Some(existing));
@@ -1298,7 +1298,6 @@ fn fingerprint(content: Option<&[u8]>, reason: &str) -> u64 {
 }
 
 enum DocumentLoad<T> {
-
     Loaded(T),
 
     FutureVersion(u32),
@@ -1369,7 +1368,6 @@ fn publish_appearance(
     theme: Option<ThemeSettings>,
     layout: Option<LayoutConfig>,
 ) {
-
     let (theme_update, layout_update) = {
         let mut current_theme = current_theme.write().unwrap();
         let mut current_layout = current_layout.write().unwrap();
@@ -1484,7 +1482,6 @@ impl AppearanceLock {
 
 impl Drop for AppearanceLock {
     fn drop(&mut self) {
-
         unsafe {
             libc::flock(self.0.as_raw_fd(), libc::LOCK_UN);
         }

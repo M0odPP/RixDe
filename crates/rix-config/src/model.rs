@@ -6,7 +6,6 @@ pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SchemaVersion {
-
     Current,
 
     Migrated,
@@ -37,7 +36,6 @@ pub fn migrate_schema_version(declared: u32) -> Option<u32> {
         declared
     };
     if version < CURRENT_SCHEMA_VERSION {
-
         return None;
     }
     Some(version)
@@ -249,7 +247,6 @@ impl Default for LauncherConfig {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LayoutConfig {
-
     #[serde(default)]
     pub schema_version: u32,
     #[serde(default)]
@@ -284,7 +281,6 @@ impl LayoutConfig {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ThemeSettings {
-
     #[serde(default)]
     pub schema_version: u32,
     #[serde(default)]
@@ -308,7 +304,6 @@ impl Default for ThemeSettings {
 }
 
 impl ThemeSettings {
-
     fn bundled(source: &str) -> Self {
         let mut theme: Self = serde_json::from_str(source).expect("bundled theme must be valid");
         theme.schema_version = CURRENT_SCHEMA_VERSION;
@@ -333,12 +328,13 @@ impl ThemeSettings {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DisplaySettings {
-
     #[serde(default)]
     pub schema_version: u32,
 
     #[serde(default)]
     pub outputs: std::collections::BTreeMap<String, OutputProfile>,
+    #[serde(default)]
+    pub primary_output: Option<String>,
     pub width: u32,
     pub height: u32,
     pub refresh_hz: u32,
@@ -352,7 +348,7 @@ pub struct OutputMode {
     pub refresh_millihz: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OutputProfile {
     pub mode: OutputMode,
     pub flipped: bool,
@@ -362,6 +358,10 @@ pub struct OutputProfile {
     pub rotation: u16,
     #[serde(default)]
     pub position: Option<OutputPosition>,
+    #[serde(default)]
+    pub mirror_of: Option<String>,
+    #[serde(default)]
+    pub primary: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -396,6 +396,9 @@ impl OutputProfile {
         {
             return Err("Display position is outside the supported desktop".into());
         }
+        if self.mirror_of.as_ref().is_some_and(|m| m.trim().is_empty()) {
+            return Err("Invalid mirror target".into());
+        }
         Ok(())
     }
 }
@@ -405,6 +408,7 @@ impl Default for DisplaySettings {
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,
             outputs: Default::default(),
+            primary_output: None,
             width: 1920,
             height: 1080,
             refresh_hz: 60,

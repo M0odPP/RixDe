@@ -470,7 +470,6 @@ struct CacheKey {
     effects: rix_config::appearance::MaterialEffects,
 }
 impl CacheKey {
-
     fn can_retain_for(&self, next: &Self) -> bool {
         self.size == next.size
             && self.region == next.region
@@ -525,7 +524,6 @@ struct SnapPreviewKey {
 }
 #[derive(Default)]
 pub struct SceneRenderer {
-
     capture: Option<Box<SceneRenderer>>,
     lock_backgrounds: HashMap<String, SolidColorBuffer>,
     decorations: crate::decoration::DecorationRenderer,
@@ -901,11 +899,35 @@ impl SceneRenderer {
         if !client_clips.is_empty() && self.client_clip_program.is_none() {
             self.client_clip_program = Some(rounded::program(renderer)?);
         }
-        let elements = space_render_elements(renderer, [&state.space], output, 1.)?
+        let mut elements: Vec<
+            SpaceRenderElements<
+                GlesRenderer,
+                smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement<
+                    GlesRenderer,
+                >,
+            >,
+        > = space_render_elements(renderer, [&state.space], output, 1.)?
             .into_iter()
             .filter(|element| !hidden.contains(element.id()))
             .filter(|element| capture.is_none_or(|filter| filter.allows(element)))
             .collect();
+        if let Some(target_name) = crate::output_control::profile(output).and_then(|p| p.mirror_of)
+        {
+            if let Some(target_output) = state.space.outputs().find(|o| {
+                o.name() == target_name || crate::output_control::identity(o) == target_name
+            }) {
+                let target_layer_map = smithay::desktop::layer_map_for_output(target_output);
+                let target_scale = smithay::utils::Scale::from(scale);
+                for layer in target_layer_map.layers() {
+                    if let Some(geometry) = target_layer_map.layer_geometry(layer) {
+                        let location = geometry.loc.to_physical_precise_round(target_scale);
+                        for elem in layer.render_elements(renderer, location, target_scale, 1.0) {
+                            elements.push(SpaceRenderElements::Surface(elem));
+                        }
+                    }
+                }
+            }
+        }
         let mut scene: Vec<_> = present_retained(elements, &mut motion, state, &hidden)
             .into_iter()
             .map(|presented| {
@@ -1200,7 +1222,6 @@ impl SceneRenderer {
         self.release_finished_blur_scratch();
         loop {
             if let Some(image) = self.blur_budget.reserve(image_bytes) {
-
                 if let Some(scratch) = self.blur_budget.reserve(scratch_bytes) {
                     return Some((image, scratch));
                 }
@@ -1302,7 +1323,9 @@ impl SceneRenderer {
                     .get(&cache_id)
                     .is_some_and(|entry| entry.key.can_retain_for(&key) && entry.layout == layout);
                 let reuse = if !retain {
-                    self.cache.remove(&cache_id).map(|entry| entry.image_texture)
+                    self.cache
+                        .remove(&cache_id)
+                        .map(|entry| entry.image_texture)
                 } else {
                     self.cache
                         .get(&cache_id)
@@ -1317,7 +1340,6 @@ impl SceneRenderer {
                     scene[index].id(),
                     &preserve,
                 ) {
-
                     let blurred = self.blur(renderer, &scene[index + 1..], &key, reuse);
                     let (image, image_texture, sync) = match blurred {
                         Ok(value) => value,
@@ -1363,14 +1385,12 @@ impl SceneRenderer {
                         },
                     );
                 } else if !retain {
-
                     let used = self.blur_budget.used();
                     let limit = self.blur_budget.limit();
                     self.maybe_warn_blur_skip(&cache_id, used, limit);
 
                     continue;
                 }
-
             }
             let cached = self.cache.get_mut(&cache_id).unwrap();
             cached.last_used = self.blur_clock;
@@ -1454,7 +1474,6 @@ impl SceneRenderer {
                         Kind::Unspecified,
                     );
                     Some(if let Some((clip, false)) = request.client_clip {
-
                         let extent = element.geometry(scale.into()).size;
                         let element = RescaleRenderElement::from_element(
                             element,
@@ -1857,7 +1876,6 @@ mod tests {
 
     #[test]
     fn animated_backdrop_refreshes_under_a_stable_identity_and_rejects_reallocation() {
-
         let key = CacheKey {
             below: vec![Stamp {
                 id: Id::new(),

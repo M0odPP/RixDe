@@ -40,7 +40,6 @@ impl OutputControl {
     ) {
         let now = Instant::now();
         if let Some(trial) = &mut self.trial {
-
             if let Some(output) = outputs.iter_mut().find(|o| o.output == trial.output) {
                 if state.lock.active {
                     trial.revert(now);
@@ -51,7 +50,7 @@ impl OutputControl {
                     && output.pending_submission.is_none()
                     && now >= self.retry_at
                 {
-                    match outputs::apply_profile(manager, output, trial.previous) {
+                    match outputs::apply_profile(manager, output, trial.previous.clone()) {
                         Ok(()) => {
                             info!(output = %output.output.name(), "Unconfirmed display mode reverted");
                             self.trial = None;
@@ -103,7 +102,7 @@ impl OutputControl {
                                 .send(Err("Output has no active mode".into()));
                             continue;
                         };
-                        match outputs::apply_profile(manager, output, *profile) {
+                        match outputs::apply_profile(manager, output, profile.clone()) {
                             Ok(()) => {
                                 self.required_presentation = output.presentations.wrapping_add(1);
                                 self.next_id = self.next_id.wrapping_add(1);
@@ -111,7 +110,7 @@ impl OutputControl {
                                     self.next_id,
                                     output.output.clone(),
                                     previous,
-                                    *profile,
+                                    profile.clone(),
                                     now,
                                 ));
                                 self.retry_at = now;

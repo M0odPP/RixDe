@@ -19,7 +19,6 @@ pub(crate) struct WindowLifecycle {
 }
 
 impl RixState {
-
     pub(crate) fn request_initial_maximize(&mut self, surface: &ToplevelSurface, maximized: bool) {
         if maximized {
             self.windows
@@ -98,7 +97,7 @@ impl RixState {
                     })
                     .cloned()
             })
-            .or_else(|| self.space.outputs().next().cloned())
+            .or_else(|| self.primary_output())
     }
 
     pub(crate) fn initial_surface_output(&self, surface: &WlSurface) -> Option<Output> {
@@ -171,7 +170,6 @@ impl RixState {
             .lifecycle
             .known
             .push(Window::new_wayland_window(surface));
-
     }
 
     pub(crate) fn commit_toplevel(&mut self, surface: &WlSurface) {
@@ -194,7 +192,6 @@ impl RixState {
         };
         window.on_commit();
         let Some(toplevel) = window.toplevel() else {
-
             return;
         };
         let has_content =
@@ -236,7 +233,6 @@ impl RixState {
                 .states
                 .contains(wayland_protocols::xdg::shell::server::xdg_toplevel::State::Maximized);
             if committed_maximized {
-
                 self.windows.maximized.insert(id, (location, (0, 0).into()));
             }
             if requested_maximized != committed_maximized {
@@ -326,7 +322,6 @@ impl RixState {
                     if let Some(location) = self.windows.minimized.get_mut(&id) {
                         *location = pending.target.loc;
                     } else {
-
                         let stack: Vec<_> = self.space.elements().cloned().collect();
                         self.space
                             .map_element(window.clone(), pending.target.loc, false);

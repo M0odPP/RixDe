@@ -65,18 +65,23 @@ pub(super) fn apply_profile(
         .insert_if_missing(crate::output_control::Placement::default);
 
     let location = connected.output.current_location();
-    let position = profile.position.or(Some(rix_config::OutputPosition {
-        x: location.x,
-        y: location.y,
-    }));
-    *connected
+    let position = if profile.mirror_of.is_some() {
+        None
+    } else {
+        profile.position.or(Some(rix_config::OutputPosition {
+            x: location.x,
+            y: location.y,
+        }))
+    };
+    if let Some(placement) = connected
         .output
         .user_data()
         .get::<crate::output_control::Placement>()
-        .unwrap()
-        .0
-        .lock()
-        .unwrap() = position;
+    {
+        *placement.position.lock().unwrap() = position;
+        *placement.mirror_of.lock().unwrap() = profile.mirror_of;
+        *placement.primary.lock().unwrap() = profile.primary;
+    }
     connected.drm_output.reset_buffers();
     Ok(())
 }
@@ -264,9 +269,10 @@ pub(super) fn reconcile_outputs(
         let global = output.create_global::<RixState>(&display.handle());
 
         output.user_data().insert_if_missing(|| {
-            crate::output_control::Placement(std::sync::Mutex::new(Some(
-                rix_config::OutputPosition { x: x_offset, y: 0 },
-            )))
+            let placement = crate::output_control::Placement::default();
+            *placement.position.lock().unwrap() =
+                Some(rix_config::OutputPosition { x: x_offset, y: 0 });
+            placement
         });
         state.space.map_output(&output, (x_offset, 0));
 
@@ -314,29 +320,78 @@ pub(super) fn reconcile_outputs(
 }
 
 pub(super) fn arrange_outputs(state: &mut RixState, outputs: &[ConnectedOutput]) {
-
-    let mut x = outputs
+    let mut mapped_locations: std::collections::HashMap<String, (i32, i32)> =
+        std::collections::HashMap::new();
+    let mut x_advance = outputs
         .iter()
         .filter_map(|o| {
-            let placement = crate::output_control::profile(&o.output)?.position?;
+            let prof = crate::output_control::profile(&o.output)?;
+            if prof.mirror_of.is_some() {
+                return None;
+            }
+            let placement = prof.position?;
             let size = state.space.output_geometry(&o.output)?.size;
             Some(placement.x.saturating_add(size.w))
         })
         .max()
         .unwrap_or(0)
         .max(0);
+
     for output in outputs {
-        let placement = crate::output_control::profile(&output.output).and_then(|p| p.position);
-        let location = placement.map_or((x, 0), |p| (p.x, p.y));
+        let prof = crate::output_control::profile(&output.output);
+        let is_mirrored = prof.as_ref().is_some_and(|p| p.mirror_of.is_some());
+        if is_mirrored {
+            continue;
+        }
+        let placement = prof.as_ref().and_then(|p| p.position);
+        let location = placement.map_or((x_advance, 0), |p| (p.x, p.y));
         output
             .output
             .change_current_state(None, None, None, Some(location.into()));
         state.space.map_output(&output.output, location);
+        mapped_locations.insert(output.output.name(), location);
+        mapped_locations.insert(crate::output_control::identity(&output.output), location);
         if placement.is_none() {
             if let Some(geometry) = state.space.output_geometry(&output.output) {
-                x += geometry.size.w;
+                x_advance += geometry.size.w;
             }
         }
     }
+
+    for output in outputs {
+        let prof = crate::output_control::profile(&output.output);
+        let Some(target_name) = prof.as_ref().and_then(|p| p.mirror_of.as_ref()) else {
+            continue;
+        };
+        let target_loc = mapped_locations.get(target_name).copied().unwrap_or((0, 0));
+        output
+            .output
+            .change_current_state(None, None, None, Some(target_loc.into()));
+        state.space.map_output(&output.output, target_loc);
+        mapped_locations.insert(output.output.name(), target_loc);
+        mapped_locations.insert(crate::output_control::identity(&output.output), target_loc);
+
+        if let Some(target_output) = outputs.iter().find(|o| {
+            o.output.name() == *target_name
+                || crate::output_control::identity(&o.output) == *target_name
+        }) {
+            if let (Some(target_geo), Some(mode)) = (
+                state.space.output_geometry(&target_output.output),
+                output.output.current_mode(),
+            ) {
+                if target_geo.size.w > 0 && mode.size.w > 0 {
+                    let auto_scale =
+                        (f64::from(mode.size.w) / f64::from(target_geo.size.w)).clamp(0.25, 4.0);
+                    output.output.change_current_state(
+                        None,
+                        None,
+                        Some(smithay::output::Scale::Fractional(auto_scale)),
+                        None,
+                    );
+                }
+            }
+        }
+    }
+
     state.reflow_output_layout();
 }

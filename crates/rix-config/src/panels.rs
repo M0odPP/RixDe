@@ -22,14 +22,21 @@ pub fn validate_panels(layout: &LayoutConfig) -> Result<(), crate::ConfigError> 
     Ok(())
 }
 
-pub fn panel_targets(layout: &LayoutConfig, outputs: &[String]) -> Vec<PanelTarget> {
+pub fn panel_targets(
+    layout: &LayoutConfig,
+    outputs: &[String],
+    primary: Option<&str>,
+) -> Vec<PanelTarget> {
     let mut targets = Vec::new();
+    let primary_name = primary.or_else(|| outputs.first().map(|s| s.as_str()));
     for panel in &layout.panels {
         for (index, output) in outputs.iter().enumerate() {
             let selected = match panel.screen.as_str() {
                 "all" => true,
-
-                "focused" | "primary" | "" => index == 0,
+                "focused" | "primary" | "" => {
+                    primary_name.is_some_and(|p| p == output)
+                        || (primary_name.is_none() && index == 0)
+                }
                 name => name == output,
             };
             if selected {
@@ -61,7 +68,7 @@ mod tests {
         specific.screen = "DP-test".into();
         layout.panels.push(specific);
         let names = vec!["HDMI-test".into(), "DP-test".into()];
-        let targets = panel_targets(&layout, &names);
+        let targets = panel_targets(&layout, &names, None);
         assert_eq!(
             targets
                 .iter()
@@ -74,7 +81,11 @@ mod tests {
                 ("dock", "DP-test")
             ]
         );
-        assert_eq!(panel_targets(&layout, &names[..1]).len(), 2);
-        assert!(panel_targets(&layout, &[]).is_empty());
+        let primary_targets = panel_targets(&layout, &names, Some("DP-test"));
+        assert!(primary_targets
+            .iter()
+            .any(|t| t.panel == "main-panel" && t.output == "DP-test"));
+        assert_eq!(panel_targets(&layout, &names[..1], None).len(), 2);
+        assert!(panel_targets(&layout, &[], None).is_empty());
     }
 }

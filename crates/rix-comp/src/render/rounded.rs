@@ -125,7 +125,6 @@ pub struct Clipped<E> {
     grain: [f32; 3],
 }
 impl<E> Clipped<E> {
-
     pub fn with_grain(mut self, grain: [f32; 3]) -> Self {
         self.grain = grain;
         self
@@ -184,7 +183,6 @@ impl<E: RenderElement<GlesRenderer>> RenderElement<GlesRenderer> for Clipped<E> 
         damage: &[Rectangle<i32, Physical>],
         opaque: &[Rectangle<i32, Physical>],
     ) -> Result<(), GlesError> {
-
         let sx = dst.size.w as f64 / self.geometry.size.w.max(1) as f64;
         let sy = dst.size.h as f64 / self.geometry.size.h.max(1) as f64;
         let rect = self.clip.bounds;

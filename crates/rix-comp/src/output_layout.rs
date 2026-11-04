@@ -23,7 +23,6 @@ fn visible_location(
 }
 
 impl RixState {
-
     pub(crate) fn detach_output(&mut self, output: &smithay::output::Output) {
         self.preserve_output_layers(output);
         self.space.unmap_output(output);
@@ -69,7 +68,7 @@ impl RixState {
         let mut outputs = self.space.outputs().cloned();
         match self.layer_outputs.get(layer.wl_surface()) {
             Some(name) => outputs.find(|output| output.name() == *name),
-            None => outputs.next(),
+            None => self.primary_output(),
         }
     }
 
@@ -93,7 +92,7 @@ impl RixState {
                     .as_ref()
                     .and_then(|(_, w)| self.space.outputs_for_element(w).into_iter().next())
             })
-            .or_else(|| self.space.outputs().next().cloned());
+            .or_else(|| self.primary_output());
         let Some(output) = output else {
             surface.send_configure();
             return;
@@ -168,7 +167,6 @@ impl RixState {
         let pending = std::mem::take(&mut self.pending_layers);
         for layer in pending {
             let Some(output) = self.layer_target_output(&layer) else {
-
                 self.pending_layers.push(layer);
                 continue;
             };
@@ -195,7 +193,7 @@ impl RixState {
                 }
             }
         }
-        let Some(fallback) = outputs.first() else {
+        let Some(fallback) = self.primary_output() else {
             return;
         };
 
@@ -259,7 +257,6 @@ impl RixState {
                 }
                 target.loc
             } else {
-
                 let normal_size = self
                     .windows
                     .restoring
@@ -331,7 +328,7 @@ impl RixState {
                     .output_geometry(o)
                     .is_some_and(|geo| geo.to_f64().contains(current))
             }) {
-                let location = self.work_area(fallback).loc.to_f64();
+                let location = self.work_area(&fallback).loc.to_f64();
                 let focus = self.surface_under(location);
                 pointer.motion(
                     self,
