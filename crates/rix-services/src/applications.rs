@@ -82,13 +82,6 @@ pub fn launch_desktop_action(path: &Path, action: &str) -> anyhow::Result<()> {
             Ok(_) => Ok(()),
             Err(error) => {
                 eprintln!("Desktop action {app_id}/{action}: D-Bus activation failed: {error}");
-
-                if error.matches(gio::IOErrorEnum::TimedOut)
-                    || error.matches(gio::DBusError::Timeout)
-                    || error.matches(gio::DBusError::NoReply)
-                {
-                    return Err(error.into());
-                }
                 launch_desktop_action_exec(path, action, &launch_context).map_err(|fallback| {
                     anyhow::anyhow!(
                         "D-Bus activation failed: {error}; Exec fallback failed: {fallback}"

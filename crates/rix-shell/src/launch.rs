@@ -14,15 +14,36 @@ pub(crate) fn launch_desktop(path: &Path) -> anyhow::Result<()> {
         .with_context(|| format!("Could not load desktop entry {}", path.display()))?;
     rix_services::applications::native_compat::prepare_desktop(&app)?;
     let context = gio::glib::MainContext::new();
-    context.with_thread_default(|| -> anyhow::Result<()> {
+    let result = context.with_thread_default(|| {
         let launch_context = gio::AppLaunchContext::new();
         context.block_on(gio::glib::future_with_timeout(
-            std::time::Duration::from_secs(30),
+            std::time::Duration::from_secs(10),
             app.launch_uris_future(&[], Some(&launch_context)),
-        ))??;
-        Ok(())
-    })??;
-    Ok(())
+        ))
+    })?;
+    match result {
+        Ok(Ok(())) => Ok(()),
+        error => {
+            let keyfile = gio::glib::KeyFile::new();
+            if keyfile
+                .load_from_file(path, gio::glib::KeyFileFlags::KEEP_TRANSLATIONS)
+                .is_ok()
+            {
+                keyfile.set_boolean("Desktop Entry", "DBusActivatable", false);
+                if let Some(fallback) = gio::DesktopAppInfo::from_keyfile(&keyfile) {
+                    let launch_context = gio::AppLaunchContext::new();
+                    if fallback.launch_uris(&[], Some(&launch_context)).is_ok() {
+                        return Ok(());
+                    }
+                }
+            }
+            match error {
+                Ok(Err(err)) => Err(err.into()),
+                Err(_) => Err(anyhow::anyhow!("Desktop entry launch timed out")),
+                _ => Ok(()),
+            }
+        }
+    }
 }
 
 #[derive(Default)]
