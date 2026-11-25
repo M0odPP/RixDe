@@ -2,6 +2,7 @@ import { Theme } from "../../../ui/common/theme.slint";
 import { ScrollArea } from "../../../ui/common/scroll_area.slint";
 import { MenuStyle, MenuSurface, MenuRow, MenuHost, SharedMenuItem } from "../../../ui/common/context_menu.slint";
 import { Button, IconButton, Field } from "controls.slint";
+import { VirtualScrollArea } from "virtual_scroll.slint";
 
 export global FilePreview {
     in-out property <int> focus-generation;
@@ -26,12 +27,18 @@ export global FilePreview {
     in-out property <int> match-start: -1;
     in-out property <int> match-end: -1;
     in-out property <int> match-generation;
+    in-out property <bool> can-prev;
+    in-out property <bool> can-next;
+    in-out property <bool> split-mode;
     callback close();
     callback open-externally();
     callback open-with();
     callback page-requested(int);
     callback zoom-requested(float);
     callback find-requested(string, bool);
+    callback prev-file();
+    callback next-file();
+    callback toggle-split();
 }
 
 export component PreviewPanel inherits Rectangle {
@@ -83,10 +90,14 @@ export component PreviewPanel inherits Rectangle {
             if event.text == "0" { root.change-zoom(1); return accept; }
         }
         if FilePreview.kind == 0 && !FilePreview.busy {
-            if event.text == Key.PageDown || event.text == Key.RightArrow { FilePreview.page-requested(Math.min(FilePreview.page-count - 1, FilePreview.page + 1)); return accept; }
-            if event.text == Key.PageUp || event.text == Key.LeftArrow { FilePreview.page-requested(Math.max(0, FilePreview.page - 1)); return accept; }
+            if event.text == Key.PageDown || (event.text == Key.RightArrow && !event.modifiers.alt) { FilePreview.page-requested(Math.min(FilePreview.page-count - 1, FilePreview.page + 1)); return accept; }
+            if event.text == Key.PageUp || (event.text == Key.LeftArrow && !event.modifiers.alt) { FilePreview.page-requested(Math.max(0, FilePreview.page - 1)); return accept; }
             if event.text == Key.Home { FilePreview.page-requested(0); return accept; }
             if event.text == Key.End { FilePreview.page-requested(FilePreview.page-count - 1); return accept; }
+        }
+        if !FilePreview.busy {
+            if (event.text == Key.LeftArrow && (event.modifiers.alt || FilePreview.kind != 0)) && FilePreview.can-prev { FilePreview.prev-file(); return accept; }
+            if (event.text == Key.RightArrow && (event.modifiers.alt || FilePreview.kind != 0)) && FilePreview.can-next { FilePreview.next-file(); return accept; }
         }
         reject
     }
@@ -147,12 +158,15 @@ export component PreviewPanel inherits Rectangle {
                     Text { min-width: 0px; horizontal-stretch: 1; text: FilePreview.title; color: Theme.text-primary; font-size: Theme.font-size-xl; font-weight: 600; overflow: elide; vertical-alignment: center; }
                     Text { min-width: 0px; horizontal-stretch: 1; text: FilePreview.subtitle; color: Theme.text-secondary; font-size: Theme.font-size-sm; overflow: elide; vertical-alignment: center; }
                 }
+                IconButton { icon: @image-url("../assets/left.svg"); accessible-name: @tr("Previous File"); visible: FilePreview.can-prev || FilePreview.can-next; enabled: FilePreview.can-prev && !FilePreview.busy; clicked => { FilePreview.prev-file(); } }
+                IconButton { icon: @image-url("../assets/right.svg"); accessible-name: @tr("Next File"); visible: FilePreview.can-prev || FilePreview.can-next; enabled: FilePreview.can-next && !FilePreview.busy; clicked => { FilePreview.next-file(); } }
                 Button { text: @tr("Open"); enabled: FilePreview.external-allowed && !FilePreview.busy; clicked => { FilePreview.open-externally(); } }
                 Button { text: @tr("Open With…"); enabled: FilePreview.external-allowed && !FilePreview.busy; clicked => { FilePreview.open-with(); } }
+                IconButton { icon: @image-url("../assets/sidebar.svg"); accessible-name: @tr("Toggle Split Preview"); active: FilePreview.split-mode; clicked => { FilePreview.toggle-split(); } }
                 IconButton { icon: @image-url("../assets/close.svg"); accessible-name: @tr("Close Preview"); clicked => { FilePreview.close(); } }
             }
         }
-        Rectangle { min-height: 1px; max-height: 1px; background: Theme.divider; }
+        Rectangle { min-height: 1px; max-height: 1px; background: Theme.border; }
         Rectangle {
             min-height: Theme.menu-action-size + Theme.default-spacing * 2;
             max-height: self.min-height;
@@ -172,12 +186,12 @@ export component PreviewPanel inherits Rectangle {
                 Button { text: @tr("Find"); visible: root.has-text; active: root.search-open; clicked => { root.open-search(); } }
             }
         }
-        Rectangle { min-height: 1px; max-height: 1px; background: Theme.divider; }
+        Rectangle { min-height: 1px; max-height: 1px; background: Theme.border; }
         Rectangle {
             visible: root.search-open;
             min-height: root.search-open ? Theme.menu-action-size + Theme.default-spacing * 2 : 0px;
             max-height: self.min-height;
-            background: Theme.control-surface;
+            background: root.desktop-material ? transparent : Theme.control-surface;
             HorizontalLayout {
                 padding-left: Theme.spacing-xl; padding-right: Theme.spacing-xl;
                 padding-top: Theme.spacing-xs; padding-bottom: Theme.spacing-xs;
@@ -191,7 +205,7 @@ export component PreviewPanel inherits Rectangle {
                 }
                 Text { text: FilePreview.search-status; color: Theme.text-secondary; font-size: Theme.font-size-sm; horizontal-stretch: 0; vertical-alignment: center; }
                 IconButton { icon: @image-url("../assets/up.svg"); accessible-name: @tr("Previous Match"); clicked => { FilePreview.find-requested(FilePreview.query, true); } }
-                IconButton { icon: @image-url("../assets/right.svg"); accessible-name: @tr("Next Match"); clicked => { FilePreview.find-requested(FilePreview.query, false); } }
+                IconButton { icon: @image-url("../assets/down.svg"); accessible-name: @tr("Next Match"); clicked => { FilePreview.find-requested(FilePreview.query, false); } }
                 IconButton { icon: @image-url("../assets/close.svg"); accessible-name: @tr("Close Search"); clicked => { root.search-open = false; keys.focus(); } }
             }
         }
@@ -199,22 +213,35 @@ export component PreviewPanel inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
             background: root.desktop-material ? transparent : Theme.sidebar-background.with-alpha(1);
-            image-scroll := Flickable {
+            image-scroll := VirtualScrollArea {
                 visible: root.has-image && FilePreview.message == "";
                 width: parent.width; height: parent.height;
-                interactive: true;
-                private property <length> fitted-width: Math.max(1px, self.width - Theme.spacing-xl * 4);
-                private property <length> page-width: self.fitted-width * FilePreview.zoom;
-                private property <length> page-height: self.page-width * FilePreview.image-height / Math.max(1, FilePreview.image-width);
-                viewport-width: Math.max(self.width, self.page-width + Theme.spacing-xl * 4);
-                viewport-height: Math.max(self.height, self.page-height + Theme.spacing-xl * 4);
-                Rectangle {
-                    x: (image-scroll.viewport-width - self.width) / 2;
-                    y: (image-scroll.viewport-height - self.height) / 2;
-                    width: image-scroll.page-width; height: image-scroll.page-height;
-                    background: FilePreview.kind == 0 ? #ffffff : Theme.value-bg;
-                    border-radius: FilePreview.kind == 0 ? 0px : Theme.radius-sm;
-                    Image { width: parent.width; height: parent.height; source: FilePreview.page-image; image-fit: contain; }
+                private property <length> avail-w: Math.max(1px, self.width - Theme.spacing-xl * 2);
+                private property <length> avail-h: Math.max(1px, self.height - Theme.spacing-xl * 2);
+                private property <float> raw-fit: Math.min(self.avail-w / Math.max(1px, FilePreview.image-width * 1px), self.avail-h / Math.max(1px, FilePreview.image-height * 1px));
+                private property <float> fit-scale: FilePreview.kind == 1 ? Math.min(1, self.raw-fit) : self.raw-fit;
+                private property <length> page-width: Math.max(1px, FilePreview.image-width * 1px * self.fit-scale * FilePreview.zoom);
+                private property <length> page-height: Math.max(1px, FilePreview.image-height * 1px * self.fit-scale * FilePreview.zoom);
+                content-width-override: self.page-width + Theme.spacing-xl * 2;
+                content-height: self.page-height + Theme.spacing-xl * 2;
+                TouchArea {
+                    width: Math.max(image-scroll.content-width, image-scroll.content-width-override);
+                    height: Math.max(image-scroll.height, image-scroll.content-height);
+                    scroll-event(event) => {
+                        if event.modifiers.control && event.delta-y != 0px {
+                            root.change-zoom(event.delta-y > 0px ? FilePreview.zoom * 1.15 : FilePreview.zoom / 1.15);
+                            return accept;
+                        }
+                        reject
+                    }
+                    Rectangle {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        width: image-scroll.page-width; height: image-scroll.page-height;
+                        background: FilePreview.kind == 0 ? #ffffff : Theme.value-bg;
+                        border-radius: FilePreview.kind == 0 ? 0px : Theme.radius-sm;
+                        Image { width: parent.width; height: parent.height; source: FilePreview.page-image; image-fit: contain; }
+                    }
                 }
             }
             text-scroll := ScrollArea {
@@ -276,7 +303,7 @@ export component PreviewPanel inherits Rectangle {
         if FilePreview.note != "": Rectangle {
             min-height: note.preferred-height + Theme.default-spacing * 2;
             max-height: self.min-height;
-            background: Theme.control-surface;
+            background: root.desktop-material ? transparent : Theme.control-surface;
             note := Text { x: Theme.spacing-xl; y: Theme.default-spacing; width: parent.width - Theme.spacing-xl * 2; text: FilePreview.note; color: Theme.text-secondary; font-size: Theme.font-size-sm; wrap: word-wrap; }
         }
     }

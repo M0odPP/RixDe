@@ -62,11 +62,14 @@ impl App {
             entry.path.clone()
         } else if target == -1 {
             tab.path.clone()
+        } else if target <= -1000 {
+            let index = usize::try_from(-i64::from(target) - 1000).ok()?;
+            self.tabs.get(index)?.path.clone()
         } else {
             let index = usize::try_from(-i64::from(target) - 2).ok()?;
             self.places.get(index)?.path.clone()
         };
-        destination.is_absolute().then_some(destination)
+        (destination.is_absolute() || destination == Path::new("trash:")).then_some(destination)
     }
 
     fn drag_event(&mut self, event: Event) {
@@ -132,14 +135,18 @@ impl App {
                 }
 
                 self.drop_operation = Some(id);
-                self.start_operation(
-                    match action {
-                        Action::Copy => Kind::Copy,
-                        Action::Move => Kind::Move,
-                    },
-                    paths,
-                    Some(destination),
-                );
+                if destination == Path::new("trash:") {
+                    self.start_operation(Kind::Trash, paths, None);
+                } else {
+                    self.start_operation(
+                        match action {
+                            Action::Copy => Kind::Copy,
+                            Action::Move => Kind::Move,
+                        },
+                        paths,
+                        Some(destination),
+                    );
+                }
             }
             Event::Error(error) => self.error(error),
         }

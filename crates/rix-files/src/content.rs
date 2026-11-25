@@ -191,6 +191,15 @@ impl App {
             destination.to_string_lossy().into_owned(),
         );
     }
+    pub(super) fn extract_here(&mut self, archive_path: PathBuf) {
+        if self.operation.is_some() {
+            return;
+        }
+        let destination = archive_path.parent().map(Path::to_owned).unwrap_or_else(home);
+        self.dialog_paths = vec![archive_path];
+        self.content.password.clear();
+        self.confirm_extraction(destination.to_string_lossy().into_owned());
+    }
     pub(super) fn confirm_extraction(&mut self, value: String) {
         let Some(path) = self.dialog_paths.first().cloned() else {
             return;
@@ -265,12 +274,99 @@ impl App {
         self.content.preview_temporary = None;
         self.show_preview(path);
     }
+    pub(super) fn step_preview(&mut self, delta: isize) {
+        let Some(current) = self.content.preview_path.as_ref() else {
+            return;
+        };
+        let files: Vec<PathBuf> = self.tabs[self.active]
+            .entries
+            .iter()
+            .filter(|e| !e.is_dir && !rix_files::archive::supported(&e.path))
+            .map(|e| e.path.clone())
+            .collect();
+        let Some(pos) = files.iter().position(|p| p == current) else {
+            return;
+        };
+        let target = pos as isize + delta;
+        if target >= 0 && (target as usize) < files.len() {
+            let next_path = files[target as usize].clone();
+            self.preview(next_path);
+        }
+    }
+    pub(super) fn toggle_preview_split(&mut self) {
+        self.prefs.preview_split = !self.prefs.preview_split;
+        if let Some(window) = self.window.upgrade() {
+            window.global::<FilePreview>().set_split_mode(self.prefs.preview_split);
+        }
+        self.save();
+    }
+    pub(super) fn extract_selected_member(&mut self, index: i32) {
+        let Some(archive_path) = self.content.archive_path.clone() else {
+            return;
+        };
+        let Some(archive) = self.content.archive.clone() else {
+            return;
+        };
+        let Some(child) = self.content.children.get(index as usize).cloned() else {
+            return;
+        };
+        if child.directory {
+            self.extract_archive();
+            return;
+        }
+        let target_dir = archive_path
+            .parent()
+            .unwrap_or_else(|| Path::new("/"))
+            .to_path_buf();
+        let password = self.content.password.clone();
+        let sender = self.sender.clone();
+        let out_name = child
+            .path
+            .file_name()
+            .unwrap_or_default()
+            .to_os_string();
+        let dest_path = target_dir.join(out_name);
+        if let Some(window) = self.window.upgrade() {
+            window.global::<ArchiveBrowser>().set_busy(true);
+        }
+        tokio::task::spawn_blocking(move || {
+            let result = rix_files::archive::read_member(
+                &archive,
+                &child.path,
+                &password,
+                &AtomicBool::new(false),
+            )
+            .and_then(|(_temp_dir, src)| {
+                std::fs::copy(&src, &dest_path)?;
+                Ok((
+                    target_dir.clone(),
+                    operations::Report {
+                        completed: vec![dest_path],
+                        ..Default::default()
+                    },
+                ))
+            })
+            .map_err(|e| e.to_string());
+            let _ = sender.send(Message::Content(Event::Extracted { result }));
+        });
+    }
     fn show_preview(&mut self, path: PathBuf) {
         self.content.preview_path = Some(path.clone());
         self.content.preview_visible = true;
+        let files: Vec<&PathBuf> = self.tabs[self.active]
+            .entries
+            .iter()
+            .filter(|e| !e.is_dir && !rix_files::archive::supported(&e.path))
+            .map(|e| &e.path)
+            .collect();
+        let pos = files.iter().position(|p| *p == &path);
+        let can_prev = pos.is_some_and(|i| i > 0);
+        let can_next = pos.is_some_and(|i| i + 1 < files.len());
         if let Some(window) = self.window.upgrade() {
             let ui = window.global::<FilePreview>();
             ui.set_visible(true);
+            ui.set_can_prev(can_prev);
+            ui.set_can_next(can_next);
             ui.set_external_allowed(self.content.preview_original.is_some());
             ui.set_body("".into());
             ui.set_page_image(Image::default());
@@ -599,6 +695,10 @@ pub(super) fn install(window: &FilesWindow, app: &Rc<RefCell<App>>) {
     let state = app.clone();
     window
         .global::<ArchiveBrowser>()
+        .on_extract_selected(move |index| state.borrow_mut().extract_selected_member(index));
+    let state = app.clone();
+    window
+        .global::<ArchiveBrowser>()
         .on_unlock(move |password| {
             let mut app = state.borrow_mut();
             if let Some(path) = app.content.archive_path.clone() {
@@ -653,6 +753,18 @@ pub(super) fn install(window: &FilesWindow, app: &Rc<RefCell<App>>) {
     window
         .global::<FilePreview>()
         .on_open_externally(move || state.borrow_mut().preview_open_external());
+    let state = app.clone();
+    window
+        .global::<FilePreview>()
+        .on_prev_file(move || state.borrow_mut().step_preview(-1));
+    let state = app.clone();
+    window
+        .global::<FilePreview>()
+        .on_next_file(move || state.borrow_mut().step_preview(1));
+    let state = app.clone();
+    window
+        .global::<FilePreview>()
+        .on_toggle_split(move || state.borrow_mut().toggle_preview_split());
     let weak = window.as_weak();
     window
         .global::<FilePreview>()

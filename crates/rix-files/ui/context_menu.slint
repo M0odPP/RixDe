@@ -3,7 +3,7 @@ import { MenuStyle, MenuSurface, MenuRow } from "../../../ui/common/context_menu
 import { PopupGeometry } from "../../../ui/common/popup_geometry.slint";
 import { ScrollArea } from "../../../ui/common/scroll_area.slint";
 
-export struct MenuItem { action: string, label: string, shortcut: string, enabled: bool, separator: bool, destructive: bool, checked: bool }
+export struct MenuItem { action: string, label: string, shortcut: string, enabled: bool, separator: bool, destructive: bool, checked: bool, checkable: bool, radio: bool }
 
 export component ActionsMenu inherits MenuSurface {
     in property <[MenuItem]> items;
@@ -70,6 +70,8 @@ export component ActionsMenu inherits MenuSurface {
                 destructive: entry.destructive;
                 separator: entry.separator;
                 checked: entry.checked;
+                checkable: entry.checkable;
+                radio: entry.radio;
                 selected: root.selected-index == index;
                 hover-on-enter: root.initial-index < 0;
                 interactive: root.open;

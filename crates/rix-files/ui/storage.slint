@@ -15,14 +15,16 @@ export component DiskSummary inherits Rectangle {
     accessible-label: @tr("Disk storage");
     accessible-description: root.name + " · " + root.mount + " · " + root.detail;
     accessible-action-default => { if root.mount != "" { root.open(); } }
-    height: Theme.icon-size + Theme.font-size-sm + Theme.default-spacing * 2 + 18px;
+    preferred-height: layout.preferred-height;
+    min-height: layout.preferred-height;
     border-radius: Theme.radius-sm;
-    border-width: 1px;
-    border-color: Theme.border;
-    background: disk-touch.has-hover ? Theme.surface-hover : Theme.overlay-idle;
+    border-width: disk-keys.has-focus ? 1.5px : 1px;
+    border-color: disk-keys.has-focus ? Theme.accent : Theme.border;
+    background: disk-touch.has-hover ? Theme.surface-hover : Theme.control-surface;
     animate background { duration: Theme.hover-duration * 1ms; easing: ease-out; }
+    forward-focus: disk-keys;
 
-    VerticalLayout {
+    layout := VerticalLayout {
         padding: Theme.default-spacing;
         spacing: Theme.spacing-xs;
         HorizontalLayout {
@@ -50,13 +52,13 @@ export component DiskSummary inherits Rectangle {
                     Text {
                         text: root.ready ? root.usage : "";
                         color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm - 1px;
+                        font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                     }
                 }
                 Rectangle {
                     height: 4px;
-                    background: Theme.divider;
+                    background: Theme.border;
                     border-radius: 2px;
                     clip: true;
                     Rectangle {
@@ -72,17 +74,24 @@ export component DiskSummary inherits Rectangle {
                     Text {
                         text: root.mount != "" ? root.mount : root.detail;
                         color: Theme.text-muted;
-                        font-size: Theme.font-size-sm - 1px;
+                        font-size: Theme.font-size-sm;
                         overflow: elide;
                         horizontal-stretch: 1;
                     }
                     if root.ready: Text {
                         text: Math.round((1 - Math.clamp(root.ratio, 0, 1)) * 100) + "% " + @tr("free");
                         color: Theme.text-muted;
-                        font-size: Theme.font-size-sm - 1px;
+                        font-size: Theme.font-size-sm;
                     }
                 }
             }
+        }
+    }
+    disk-keys := FocusScope {
+        enabled: root.mount != "";
+        key-pressed(e) => {
+            if e.text == Key.Return || e.text == " " { root.open(); return accept; }
+            reject
         }
     }
     disk-touch := TouchArea {
@@ -93,6 +102,6 @@ export component DiskSummary inherits Rectangle {
                 root.context(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
             }
         }
-        clicked => { root.open(); }
+        clicked => { disk-keys.focus(); root.open(); }
     }
 }

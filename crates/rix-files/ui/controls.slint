@@ -32,6 +32,8 @@ export component Button inherits Rectangle {
         : root.destructive ? (root.active ? transparent : Theme.danger.with-alpha(0.5))
         : root.active ? transparent
         : (touch.has-hover ? Theme.border-highlight : Theme.control-border);
+    animate background { duration: Theme.hover-duration * 1ms; easing: ease-out; }
+    animate border-color { duration: Theme.hover-duration * 1ms; easing: ease-out; }
     accessible-role: button; accessible-label: root.accessible-name;
     accessible-enabled: root.enabled;
     accessible-action-default => { if root.enabled { root.clicked(); } }
@@ -58,24 +60,34 @@ export component Button inherits Rectangle {
 export component IconButton inherits Rectangle {
     in property <image> icon;
     in property <string> accessible-name;
+    in property <string> tooltip: root.accessible-name;
     in property <bool> enabled: true;
     in property <bool> active: false;
+    out property <bool> hovered: touch.has-hover;
+    callback hover-changed(bool, length, length);
     callback clicked();
     width: Theme.icon-size + Theme.default-spacing * 2;
     height: self.width;
     horizontal-stretch: 0; vertical-stretch: 0;
-    opacity: root.enabled ? 1 : 0.35;
     background: root.active ? Theme.surface-active : touch.has-hover ? Theme.surface-hover : transparent;
     border-radius: Theme.radius-sm;
+    animate background { duration: Theme.hover-duration * 1ms; easing: ease-out; }
     Rectangle { background: transparent; border-radius: Theme.radius-sm; border-color: Theme.accent; border-width: keys.has-focus ? 1px : 0px; }
     Image { x: (parent.width - self.width)/2; y: (parent.height - self.height)/2;
-        width: Theme.icon-size; height: self.width; source: root.icon; colorize: Theme.text-primary; image-fit: contain;
+        width: Theme.icon-size; height: self.width; source: root.icon; colorize: Theme.text-primary; opacity: root.enabled ? 1 : 0.35; image-fit: contain;
     }
     accessible-role: button; accessible-label: root.accessible-name; accessible-enabled: root.enabled;
     accessible-action-default => { if root.enabled { root.clicked(); } }
     forward-focus: keys;
     keys := FocusScope { enabled: root.enabled; key-pressed(e) => { if e.text == Key.Return || e.text == " " { root.clicked(); return accept; } reject } }
-    touch := TouchArea { enabled: root.enabled; mouse-cursor: pointer; clicked => { keys.focus(); root.clicked(); } }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        changed has-hover => {
+            root.hover-changed(self.has-hover, root.absolute-position.x + root.width / 2, root.absolute-position.y + root.height + 6px);
+        }
+        clicked => { keys.focus(); root.clicked(); }
+    }
 }
 
 export component Field inherits LineEdit {

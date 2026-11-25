@@ -24,6 +24,7 @@ struct Mount {
     id: u64,
     device: (u32, u32),
     path: PathBuf,
+    fs_type: String,
     source: OsString,
 }
 
@@ -122,13 +123,146 @@ fn parse_mount(line: &[u8]) -> Option<Mount> {
     if !path.is_absolute() {
         return None;
     }
+    let fs_type = String::from_utf8_lossy(fields[separator + 1]).into_owned();
     let source = OsString::from_vec(unescape(fields[separator + 2])?);
     Some(Mount {
         id,
         device: (major, minor),
         path,
+        fs_type,
         source,
     })
+}
+
+pub fn mounted_disks() -> Vec<DiskUsage> {
+    let Ok(mountinfo) = fs::read("/proc/self/mountinfo") else {
+        return Vec::new();
+    };
+    let mounts = filter_unique_user_mounts(parse_mountinfo(&mountinfo));
+    let mut disks = Vec::new();
+
+    for mount in &mounts {
+        let Ok(c_path) = CString::new(mount.path.as_os_str().as_bytes()) else {
+            continue;
+        };
+        let mut stats = MaybeUninit::<libc::statvfs>::uninit();
+        if unsafe { libc::statvfs(c_path.as_ptr(), stats.as_mut_ptr()) } != 0 {
+            continue;
+        }
+        let stats = unsafe { stats.assume_init() };
+        let block_bytes = if stats.f_frsize != 0 {
+            stats.f_frsize
+        } else {
+            stats.f_bsize
+        };
+        #[allow(clippy::unnecessary_cast)]
+        let Ok((total_bytes, used_bytes, available_bytes, usage_ratio)) = capacity(
+            stats.f_blocks as u64,
+            stats.f_bfree as u64,
+            stats.f_bavail as u64,
+            block_bytes as u64,
+        ) else {
+            continue;
+        };
+        disks.push(DiskUsage {
+            mount_path: mount.path.clone(),
+            source: mount.source.clone(),
+            total_bytes,
+            used_bytes,
+            available_bytes,
+            usage_ratio,
+        });
+    }
+    disks
+}
+
+fn filter_unique_user_mounts(mounts: Vec<Mount>) -> Vec<Mount> {
+    let mut candidates: Vec<Mount> = mounts.into_iter().filter(is_user_mount).collect();
+    candidates.sort_by(|a, b| {
+        let rank = |p: &Path| {
+            if p == Path::new("/") {
+                0
+            } else if p.starts_with("/run/media") || p.starts_with("/media") {
+                1
+            } else if p.starts_with("/mnt") {
+                2
+            } else {
+                3
+            }
+        };
+        rank(&a.path)
+            .cmp(&rank(&b.path))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    let mut seen_mounts = std::collections::HashSet::new();
+    let mut seen_devices = std::collections::HashSet::new();
+    let mut seen_sources = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for mount in candidates {
+        if !seen_mounts.insert(mount.path.clone()) {
+            continue;
+        }
+        if !seen_devices.insert(mount.device) {
+            continue;
+        }
+        if mount.source.as_bytes().starts_with(b"/dev/")
+            && !seen_sources.insert(mount.source.clone())
+        {
+            continue;
+        }
+        out.push(mount);
+    }
+    out
+}
+
+fn is_user_mount(mount: &Mount) -> bool {
+    let path = &mount.path;
+    if path == Path::new("/") {
+        return true;
+    }
+    if path
+        .components()
+        .any(|c| matches!(c, std::path::Component::Normal(s) if s.as_bytes().starts_with(b".")))
+    {
+        return false;
+    }
+    if path.starts_with("/run") && !path.starts_with("/run/media") {
+        return false;
+    }
+    for prefix in [
+        "/proc", "/sys", "/dev", "/var", "/boot", "/usr", "/opt", "/srv", "/etc", "/tmp",
+        "/root", "/snap",
+    ] {
+        if path.starts_with(prefix) {
+            return false;
+        }
+    }
+    if path.starts_with("/media") || path.starts_with("/run/media") || path.starts_with("/mnt") {
+        return !matches!(
+            mount.fs_type.as_str(),
+            "autofs" | "proc" | "sysfs" | "devtmpfs" | "devpts" | "tmpfs"
+        );
+    }
+    let fs = mount.fs_type.as_str();
+    matches!(
+        fs,
+        "ext2"
+            | "ext3"
+            | "ext4"
+            | "btrfs"
+            | "xfs"
+            | "f2fs"
+            | "vfat"
+            | "exfat"
+            | "ntfs"
+            | "ntfs3"
+            | "fuseblk"
+            | "zfs"
+            | "nfs"
+            | "nfs4"
+            | "cifs"
+            | "smb3"
+    )
 }
 
 fn unescape(field: &[u8]) -> Option<Vec<u8>> {
@@ -321,5 +455,26 @@ mod tests {
         let non_utf8_usage = disk_usage(&non_utf8).unwrap();
         assert_eq!(non_utf8_usage.mount_path, usage.mount_path);
         assert_eq!(non_utf8_usage.source, usage.source);
+    }
+
+    #[test]
+    fn btrfs_subvolumes_snapshots_and_system_mounts_are_never_duplicated_as_extra_disks() {
+        let mountinfo = br#"37 40 0:34 /@snapshots /.snapshots rw,noatime shared:115 - btrfs /dev/nvme0n1p3 rw,subvol=/@snapshots
+40 1 0:34 /@ / rw,noatime shared:1 - btrfs /dev/nvme0n1p3 rw,subvol=/@
+60 40 0:34 /@cache /var/cache/pacman/pkg rw,noatime shared:119 - btrfs /dev/nvme0n1p3 rw,subvol=/@cache
+64 40 0:34 /@log /var/log rw,noatime shared:123 - btrfs /dev/nvme0n1p3 rw,subvol=/@log
+59 40 0:34 /@home /home rw,noatime shared:127 - btrfs /dev/nvme0n1p3 rw,subvol=/@home
+161 40 259:1 / /boot/efi rw,relatime shared:131 - vfat /dev/nvme0n1p1 rw
+200 40 8:1 / /run/media/tymur/USB_DRIVE rw,relatime shared:200 - exfat /dev/sda1 rw
+"#;
+        let filtered = filter_unique_user_mounts(parse_mountinfo(mountinfo));
+        let paths: Vec<PathBuf> = filtered.into_iter().map(|m| m.path).collect();
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/"),
+                PathBuf::from("/run/media/tymur/USB_DRIVE")
+            ]
+        );
     }
 }

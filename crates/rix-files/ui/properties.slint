@@ -20,14 +20,16 @@ export global PropertiesView {
     in-out property <[PropertyDetail]> ownership;
     in-out property <[PropertyPermission]> permissions;
     in-out property <bool> multiple;
+    in-out property <bool> can-edit-permissions;
     callback copy-paths();
+    callback toggle-permission(int, int);
 }
 
 component SectionCard inherits Rectangle {
-    background: Theme.overlay-idle;
+    background: Theme.control-surface;
     border-radius: Theme.radius-md;
     border-width: 1px;
-    border-color: Theme.control-border.with-alpha(0.4);
+    border-color: Theme.border;
 }
 
 component SectionHeader inherits Text {
@@ -62,7 +64,9 @@ component Details inherits VerticalLayout {
 }
 
 export component PropertiesPanel inherits MenuSurface {
+    surface-radius: Theme.radius-md;
     callback dismissed();
+    TouchArea {}
     public function focus-panel() { close-button.focus-button(); }
     keys := FocusScope {
         key-pressed(event) => {
@@ -96,7 +100,7 @@ export component PropertiesPanel inherits MenuSurface {
             spacing: Theme.default-spacing;
             HorizontalLayout {
                 alignment: space-between;
-                Text { text: @tr("Properties"); color: Theme.text-primary; font-size: Theme.font-size-md; font-weight: 700; vertical-alignment: center; }
+                Text { text: @tr("Properties"); color: Theme.text-primary; font-size: Theme.font-size-lg; font-weight: 700; vertical-alignment: center; }
             }
             scroll := ScrollArea {
                 vertical-stretch: 1;
@@ -109,9 +113,9 @@ export component PropertiesPanel inherits MenuSurface {
                         Rectangle {
                             width: 52px; height: 52px;
                             border-radius: Theme.radius-md;
-                            background: Theme.overlay-idle;
+                            background: Theme.control-surface;
                             border-width: 1px;
-                            border-color: Theme.control-border.with-alpha(0.35);
+                            border-color: Theme.border;
                             Image {
                                 x: (parent.width - self.width) / 2;
                                 y: (parent.height - self.height) / 2;
@@ -139,7 +143,7 @@ export component PropertiesPanel inherits MenuSurface {
                         if PropertiesView.link-target != "": SectionHeader { text: @tr("Link target"); }
                         link := LineEdit {
                             visible: PropertiesView.link-target != "";
-                            min-height: self.visible ? Theme.menu-action-size : 0px;
+                            min-height: self.visible ? location.min-height : 0px;
                             preferred-height: self.min-height;
                             max-height: self.visible ? 65535px : 0px;
                             text: PropertiesView.link-target;
@@ -182,12 +186,27 @@ export component PropertiesPanel inherits MenuSurface {
                                     text: label; horizontal-stretch: 1; color: Theme.text-muted; font-size: Theme.font-size-sm; horizontal-alignment: center;
                                 }
                             }
-                            for permission in PropertiesView.permissions: HorizontalLayout {
+                            for permission[pidx] in PropertiesView.permissions: HorizontalLayout {
                                 spacing: Theme.default-spacing;
-                                Text { text: permission.label; horizontal-stretch: 2; color: Theme.text-secondary; font-size: Theme.font-size-sm; wrap: word-wrap; }
-                                for allowed in [permission.read, permission.write, permission.execute]: Text {
-                                    text: allowed ? "✓" : "—"; horizontal-stretch: 1; color: allowed ? Theme.accent : Theme.text-muted; font-size: Theme.font-size-md; horizontal-alignment: center;
-                                    accessible-label: allowed ? @tr("Allowed") : @tr("Not allowed");
+                                Text { text: permission.label; horizontal-stretch: 2; color: Theme.text-secondary; font-size: Theme.font-size-sm; vertical-alignment: center; wrap: word-wrap; }
+                                for allowed[bidx] in [permission.read, permission.write, permission.execute]: Rectangle {
+                                    horizontal-stretch: 1;
+                                    min-height: Theme.icon-size + 6px;
+                                    border-radius: Theme.radius-sm;
+                                    background: PropertiesView.can-edit-permissions && perm-touch.has-hover ? Theme.surface-hover : transparent;
+                                    border-width: PropertiesView.can-edit-permissions ? 1px : 0px;
+                                    border-color: perm-touch.has-hover ? Theme.border-highlight : transparent;
+                                    Text {
+                                        width: parent.width; height: parent.height;
+                                        text: allowed ? "✓" : "—"; color: allowed ? Theme.accent : Theme.text-muted; font-size: Theme.font-size-md;
+                                        horizontal-alignment: center; vertical-alignment: center;
+                                        accessible-label: allowed ? @tr("Allowed") : @tr("Not allowed");
+                                    }
+                                    perm-touch := TouchArea {
+                                        enabled: PropertiesView.can-edit-permissions;
+                                        mouse-cursor: pointer;
+                                        clicked => { PropertiesView.toggle-permission(pidx, bidx); }
+                                    }
                                 }
                             }
                             if PropertiesView.permission-note != "": Text { text: PropertiesView.permission-note; color: Theme.text-muted; font-size: Theme.font-size-sm; wrap: word-wrap; }
@@ -196,7 +215,7 @@ export component PropertiesPanel inherits MenuSurface {
                     }
                 }
             }
-            Rectangle { height: 1px; vertical-stretch: 0; background: Theme.divider; }
+            Rectangle { height: 1px; vertical-stretch: 0; background: Theme.border; }
             footer := Rectangle {
                 private property <bool> stacked: self.width < Theme.font-size-md * 22;
                 private property <length> button-height: Theme.icon-size + Theme.default-spacing * 2;
@@ -204,7 +223,7 @@ export component PropertiesPanel inherits MenuSurface {
                 vertical-stretch: 0;
                 copy-button := Button {
                     x: 0px; y: 0px;
-                    width: footer.stacked ? footer.width : Math.min(footer.width * 0.65, Theme.font-size-md * 12);
+                    width: footer.stacked ? footer.width : Math.max(self.preferred-width, (footer.width - Theme.default-spacing) * 0.5);
                     height: footer.button-height;
                     text: PropertiesView.multiple ? @tr("Copy paths") : @tr("Copy path");
                     clicked => { PropertiesView.copy-paths(); }
@@ -212,7 +231,7 @@ export component PropertiesPanel inherits MenuSurface {
                 close-button := Button {
                     x: footer.stacked ? 0px : footer.width - self.width;
                     y: footer.stacked ? footer.button-height + Theme.default-spacing : 0px;
-                    width: footer.stacked ? footer.width : Math.min(footer.width * 0.3, Theme.font-size-md * 7);
+                    width: footer.stacked ? footer.width : Math.max(self.preferred-width, 100px);
                     height: footer.button-height;
                     text: @tr("Close"); active: true; clicked => { root.dismissed(); }
                 }

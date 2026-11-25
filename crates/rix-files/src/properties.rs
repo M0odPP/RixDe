@@ -328,6 +328,7 @@ impl App {
         let mode = common(&items, |item| item.permissions);
         let meaningful_mode =
             mode.filter(|_| items.iter().all(|item| item.kind != "Symbolic link"));
+        ui.set_can_edit_permissions(meaningful_mode.is_some() && !items.is_empty());
         ui.set_permissions(model(
             meaningful_mode
                 .map(|mode| {
@@ -364,6 +365,52 @@ impl App {
                     .unwrap_or_else(|| i18n::tr("Varies").to_string()),
             ),
         ]));
+    }
+
+    pub(super) fn toggle_permission(&mut self, group: i32, bit: i32) {
+        if self.dialog_kind != 10 || self.dialog_paths.is_empty() {
+            return;
+        }
+        let shift = match group {
+            0 => 6,
+            1 => 3,
+            2 => 0,
+            _ => return,
+        };
+        let mask = match bit {
+            0 => 4u32 << shift,
+            1 => 2u32 << shift,
+            2 => 1u32 << shift,
+            _ => return,
+        };
+        use std::os::unix::fs::PermissionsExt;
+        let mut updated = false;
+        let mut first_error = None;
+        for path in &self.dialog_paths {
+            let Ok(meta) = std::fs::symlink_metadata(path) else {
+                continue;
+            };
+            if meta.file_type().is_symlink() {
+                continue;
+            }
+            let current = meta.permissions().mode() & 0o7777;
+            let next = current ^ mask;
+            if let Err(error) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(next))
+            {
+                if first_error.is_none() {
+                    first_error = Some(error.to_string());
+                }
+            } else {
+                updated = true;
+            }
+        }
+        if let Some(error) = first_error {
+            self.set_notice(true, error);
+        }
+        if updated {
+            let paths = self.dialog_paths.clone();
+            self.show_paths_properties(paths);
+        }
     }
 
     pub(super) fn copy_property_paths(&self) {

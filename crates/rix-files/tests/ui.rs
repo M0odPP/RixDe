@@ -143,9 +143,11 @@ fn populate(w: &FilesWindow, theme: &rix_config::ThemeSettings) {
     w.set_tabs(model(vec![
         TabItem {
             label: "Documents".into(),
+            tooltip: "/home/user/Documents".into(),
         },
         TabItem {
             label: "Downloads".into(),
+            tooltip: "/home/user/Downloads".into(),
         },
     ]));
     w.set_places(model(
@@ -343,6 +345,7 @@ fn actual_blank_area_drag_selects_rows_and_escape_restores_the_original_selectio
                 name: file.name.to_string(),
                 is_dir: file.is_dir,
                 is_symlink: false,
+                broken_symlink: false,
                 size: 0,
                 modified: None,
                 kind: String::new(),
@@ -494,6 +497,27 @@ fn control_drag_preserves_selected_files_and_control_click_toggles_only_on_relea
     let theme = rix_config::ThemeSettings::default();
     theme_bindings::apply(w.global::<Theme>(), w.global::<Palette>(), &theme);
     populate(&w, &theme);
+    w.on_next_menu_index(|items, current, direction| {
+        let len = items.row_count() as i32;
+        if len == 0 {
+            return -1;
+        }
+        let mut idx = if current < 0 {
+            if direction < 0 { len - 1 } else { 0 }
+        } else {
+            (current + direction).clamp(0, len - 1)
+        };
+        while let Some(item) = items.row_data(idx as usize) {
+            if item.enabled && !item.separator {
+                return idx;
+            }
+            idx += if direction < 0 { -1 } else { 1 };
+            if idx < 0 || idx >= len {
+                break;
+            }
+        }
+        -1
+    });
     let items: Vec<_> = w
         .get_entries()
         .iter()
@@ -800,7 +824,7 @@ fn modal_keyboard_is_scoped_and_file_focus_returns_after_dismissal() {
             "File keyboard focus must return after kind {kind}"
         );
     }
-    for kind in [1, 2, 3, 6] {
+    for kind in [1, 2, 6] {
         w.set_dialog_value(format!("value {kind}").into());
         w.set_dialog_kind(kind);
         w.invoke_focus_dialog();
@@ -811,9 +835,24 @@ fn modal_keyboard_is_scoped_and_file_focus_returns_after_dismissal() {
             "Return must confirm modal kind {kind}"
         );
     }
+    w.set_dialog_value("value 3".into());
+    w.set_dialog_kind(3);
+    w.invoke_focus_dialog();
+    press(Key::Return);
+    assert_eq!(
+        w.get_dialog_kind(),
+        0,
+        "Return on delete modal default focus (Cancel) must dismiss safely"
+    );
+    assert_eq!(dismissed.get(), 7);
+    w.set_dialog_value("value 3".into());
+    w.set_dialog_kind(3);
+    w.invoke_focus_dialog();
+    press(Key::Tab);
+    press(Key::Return);
     assert_eq!(
         *confirmed.borrow(),
-        ["value 1", "value 2", "value 3", "value 6"]
+        ["value 1", "value 2", "value 6", "value 3"]
     );
 
     w.set_dialog_kind(4);
@@ -821,7 +860,7 @@ fn modal_keyboard_is_scoped_and_file_focus_returns_after_dismissal() {
     press(Key::Return);
     assert_eq!(
         dismissed.get(),
-        7,
+        8,
         "Return must close the details/error dialog"
     );
     w.set_dialog_kind(5);
@@ -840,7 +879,7 @@ fn modal_keyboard_is_scoped_and_file_focus_returns_after_dismissal() {
 
     press(Key::Tab);
     press(Key::Return);
-    assert_eq!(dismissed.get(), 8);
+    assert_eq!(dismissed.get(), 9);
     assert_eq!(w.get_dialog_kind(), 0);
 }
 fn assert_inside(element: &ElementHandle, width: f32, height: f32) {
@@ -1100,12 +1139,19 @@ fn sidebar_context_menu_unpins_the_place_under_the_pointer() {
         pointer(&w, center(&place), PointerEventButton::Right);
         let popup = element(&w, "Place actions");
         assert_inside(&popup, width, height);
-        assert_eq!(
-            popup.size().height,
-            w.global::<Theme>().get_menu_row_height()
-                + 2. * w.global::<Theme>().get_context_menu_padding(),
-            "Single-row menu must not reuse the previous menu's layout"
+        assert!(
+            popup.size().height > w.global::<Theme>().get_menu_row_height() * 5.,
+            "Place actions menu must expose all 6 place actions"
         );
+        for label in [
+            "Open",
+            "Open in new tab",
+            "Open terminal here",
+            "Copy path",
+            "Properties",
+        ] {
+            let _ = popup_action(&w, label, &popup);
+        }
         let action = popup_action(&w, "Unpin from Places", &popup);
         pointer(&w, center(&action), PointerEventButton::Left);
         assert_eq!(
@@ -1136,6 +1182,27 @@ fn double_click_requires_the_same_file_across_adjacent_rows() {
     let theme = rix_config::ThemeSettings::default();
     theme_bindings::apply(w.global::<Theme>(), w.global::<Palette>(), &theme);
     populate(&w, &theme);
+    w.on_next_menu_index(|items, current, direction| {
+        let len = items.row_count() as i32;
+        if len == 0 {
+            return -1;
+        }
+        let mut idx = if current < 0 {
+            if direction < 0 { len - 1 } else { 0 }
+        } else {
+            (current + direction).clamp(0, len - 1)
+        };
+        while let Some(item) = items.row_data(idx as usize) {
+            if item.enabled && !item.separator {
+                return idx;
+            }
+            idx += if direction < 0 { -1 } else { 1 };
+            if idx < 0 || idx >= len {
+                break;
+            }
+        }
+        -1
+    });
     w.window().set_size(slint::LogicalSize::new(1080., 720.));
     w.show().unwrap();
     let activated = Rc::new(RefCell::new(Vec::new()));
@@ -1241,10 +1308,36 @@ fn render_theme_changes_grid_and_confirmation_at_multiple_sizes() {
             false,
             4,
         ),
+        (
+            "create-folder-popover".into(),
+            rix_config::ThemeSettings::default(),
+            1080,
+            720,
+            false,
+            1,
+        ),
+        (
+            "conflict-dialog".into(),
+            rix_config::ThemeSettings::default(),
+            1080,
+            720,
+            false,
+            11,
+        ),
     ]);
     for (name, theme, width, height, grid, dialog) in cases {
         theme_bindings::apply(w.global::<Theme>(), w.global::<Palette>(), &theme);
         populate(&w, &theme);
+        w.set_breadcrumbs(model(vec![
+            BreadcrumbSegment {
+                label: "Home".into(),
+                path: "/home/demo".into(),
+            },
+            BreadcrumbSegment {
+                label: "Documents".into(),
+                path: "/home/demo/Documents".into(),
+            },
+        ]));
         let chooser = w.global::<ApplicationChooser>();
         chooser.set_title("Open with".into());
         chooser.set_description("Architecture.pdf · PDF document".into());
@@ -1280,15 +1373,20 @@ fn render_theme_changes_grid_and_confirmation_at_multiple_sizes() {
         ]));
         w.set_grid_view(grid);
         w.set_dialog_kind(dialog);
+        w.set_dialog_value("New folder".into());
         w.set_dialog_title(
             if dialog == 4 {
                 "Properties"
+            } else if dialog == 1 {
+                "New folder"
+            } else if dialog == 11 {
+                "File already exists"
             } else {
                 "Delete permanently?"
             }
             .into(),
         );
-        w.set_dialog_text(if dialog == 4 { "/home/demo/Documents/notes.txt\nType: File\nSize: 24.5 KiB\nModified: 2026-10-04 20:00\nPermissions: 0644\nOwner ID: 1000\nGroup ID: 1000" } else { "Delete the selected file? This action cannot be undone." }.into());
+        w.set_dialog_text(if dialog == 4 { "/home/demo/Documents/notes.txt\nType: File\nSize: 24.5 KiB\nModified: 2026-10-04 20:00\nPermissions: 0644\nOwner ID: 1000\nGroup ID: 1000" } else if dialog == 11 { "“notes.txt” already exists in this folder. What would you like to do?" } else { "Delete the selected file? This action cannot be undone." }.into());
         w.window().set_size(slint::PhysicalSize::new(width, height));
         w.show().unwrap();
         slint::platform::update_timers_and_animations();
@@ -1649,14 +1747,14 @@ fn entire_window_and_dialog_follow_live_material_without_opaque_patches() {
                     .global::<SkinRenderer>()
                     .invoke_render_rounded(
                         menu,
-                        560.,
+                        440.,
                         200.,
                         false,
-                        w.global::<Theme>().get_context_menu_radius(),
+                        w.global::<Theme>().get_radius_md(),
                     )
                     .to_rgba8_premultiplied()
                     .unwrap();
-                let menu = pixels.as_slice()[100 * 560 + 280];
+                let menu = pixels.as_slice()[100 * 440 + 220];
                 let scale = |value: u8| (f32::from(value) * theme.opacity).round() as u8;
                 expected.blend(PremultipliedRgbaColor {
                     red: scale(menu.r),
@@ -1681,28 +1779,29 @@ fn entire_window_and_dialog_follow_live_material_without_opaque_patches() {
             let prepared = capture(&format!("{name}-dialog-prepared"));
 
             assert_eq!(prepared[center].alpha, 255);
+            let outside = (120 * width + 20) as usize;
+            assert_ne!(
+                (prepared[outside].red, prepared[outside].green, prepared[outside].blue),
+                (34, 45, 60),
+                "Dialog backdrop blur must be clipped strictly to the modal card, never blurring the entire window"
+            );
             if name == "distinct-svg" || name == "glass" {
                 let mut expected: PremultipliedRgbaColor =
                     slint::Color::from_rgb_u8(34, 45, 60).into();
-                let shadow = w.global::<Theme>().get_shadow();
-                expected.blend(
-                    slint::Color::from_argb_u8(153, shadow.red(), shadow.green(), shadow.blue())
-                        .into(),
-                );
                 let menu = w.global::<Theme>().get_menu_frame();
                 if menu.available {
                     let pixels = w
                         .global::<SkinRenderer>()
                         .invoke_render_rounded(
                             menu,
-                            560.,
+                            440.,
                             200.,
                             false,
-                            w.global::<Theme>().get_context_menu_radius(),
+                            w.global::<Theme>().get_radius_md(),
                         )
                         .to_rgba8_premultiplied()
                         .unwrap();
-                    let pixel = pixels.as_slice()[100 * 560 + 280];
+                    let pixel = pixels.as_slice()[100 * 440 + 220];
                     let scale = |value: u8| (f32::from(value) * theme.opacity).round() as u8;
                     expected.blend(PremultipliedRgbaColor {
                         red: scale(pixel.r),
@@ -1716,7 +1815,7 @@ fn entire_window_and_dialog_follow_live_material_without_opaque_patches() {
                 assert_pixel(
                     prepared[center],
                     expected,
-                    "Prepared dialog uses the current material over local blurred content",
+                    "Prepared dialog uses the current material over local card-only blurred content",
                 );
             }
         }
@@ -1728,4 +1827,257 @@ fn entire_window_and_dialog_follow_live_material_without_opaque_patches() {
         serde_json::to_vec_pretty(&evidence).unwrap(),
     )
     .unwrap();
+}
+
+#[test]
+fn all_menus_expose_complete_actions_and_render_cleanly() {
+    i_slint_backend_testing::init_no_event_loop();
+    let w = FilesWindow::new().unwrap();
+    let theme = rix_config::ThemeSettings::default();
+    theme_bindings::apply(w.global::<Theme>(), w.global::<Palette>(), &theme);
+    populate(&w, &theme);
+    w.on_next_menu_index(|items, current, direction| {
+        let len = items.row_count() as i32;
+        if len == 0 {
+            return -1;
+        }
+        let mut idx = if current < 0 {
+            if direction < 0 { len - 1 } else { 0 }
+        } else {
+            (current + direction).clamp(0, len - 1)
+        };
+        while let Some(item) = items.row_data(idx as usize) {
+            if item.enabled && !item.separator {
+                return idx;
+            }
+            idx += if direction < 0 { -1 } else { 1 };
+            if idx < 0 || idx >= len {
+                break;
+            }
+        }
+        -1
+    });
+    w.set_breadcrumbs(model(vec![
+        BreadcrumbSegment {
+            label: "/".into(),
+            path: "/".into(),
+        },
+        BreadcrumbSegment {
+            label: "home".into(),
+            path: "/home".into(),
+        },
+        BreadcrumbSegment {
+            label: "Workspace".into(),
+            path: "/home/Workspace".into(),
+        },
+    ]));
+    w.set_notice_text("3 items copied".into());
+    w.set_desktop_material_supported(false);
+    w.set_desktop_material_enabled(false);
+    w.window().set_size(slint::LogicalSize::new(1080., 720.));
+    w.show().unwrap();
+    slint::platform::update_timers_and_animations();
+
+    let options_btn = element(&w, "Options");
+    pointer(&w, center(&options_btn), PointerEventButton::Left);
+    slint::platform::update_timers_and_animations();
+    let opts = ElementHandle::find_by_accessible_label(&w, "Options")
+        .find(|e| e.size().height > 60.)
+        .expect("Options popup must be visible");
+    assert_inside(&opts, 1080., 720.);
+    for label in [
+        "New folder",
+        "New file",
+        "Paste",
+        "Select all",
+        "Show hidden files",
+        "Refresh",
+        "Name",
+        "Descending",
+    ] {
+        let _ = popup_action(&w, label, &opts);
+    }
+    w.window().dispatch_event(WindowEvent::KeyPressed {
+        text: slint::platform::Key::End.into(),
+    });
+    w.window().dispatch_event(WindowEvent::KeyReleased {
+        text: slint::platform::Key::End.into(),
+    });
+    slint::platform::update_timers_and_animations();
+    for label in ["Folder properties", "Restore default Places"] {
+        let _ = popup_action(&w, label, &opts);
+    }
+    w.invoke_dismiss_menu();
+    slint::platform::update_timers_and_animations();
+
+    let folder = element(&w, "Projects");
+    pointer(&w, center(&folder), PointerEventButton::Right);
+    slint::platform::update_timers_and_animations();
+    let file_menu = element(&w, "File actions");
+    assert_inside(&file_menu, 1080., 720.);
+    for label in [
+        "Open",
+        "Open in new tab",
+        "Extract here",
+        "Open with…",
+        "Preview",
+        "Copy",
+        "Duplicate",
+    ] {
+        let _ = popup_action(&w, label, &file_menu);
+    }
+    w.window().dispatch_event(WindowEvent::KeyPressed {
+        text: slint::platform::Key::End.into(),
+    });
+    w.window().dispatch_event(WindowEvent::KeyReleased {
+        text: slint::platform::Key::End.into(),
+    });
+    slint::platform::update_timers_and_animations();
+    let _ = popup_action(&w, "Properties", &file_menu);
+    w.invoke_dismiss_menu();
+    slint::platform::update_timers_and_animations();
+
+    let area = element(&w, "Folder contents");
+    let area_pos = area.absolute_position();
+    let bottom_empty = slint::LogicalPosition::new(
+        area_pos.x + area.size().width * 0.5,
+        area_pos.y + area.size().height - 16.,
+    );
+    pointer(&w, bottom_empty, PointerEventButton::Right);
+    slint::platform::update_timers_and_animations();
+    let folder_menu = element(&w, "Folder actions");
+    assert_inside(&folder_menu, 1080., 720.);
+    for label in ["New folder", "New file", "Paste", "Bookmark folder", "Refresh", "Properties"] {
+        let _ = popup_action(&w, label, &folder_menu);
+    }
+    w.invoke_dismiss_menu();
+    slint::platform::update_timers_and_animations();
+
+    let sidebar = element(&w, "Places");
+    let place = popup_action(&w, "Documents", &sidebar);
+    pointer(&w, center(&place), PointerEventButton::Right);
+    slint::platform::update_timers_and_animations();
+    let place_menu = element(&w, "Place actions");
+    assert_inside(&place_menu, 1080., 720.);
+    for label in ["Open", "Open in new tab", "Open terminal here", "Copy path", "Properties", "Unpin from Places"] {
+        let _ = popup_action(&w, label, &place_menu);
+    }
+    w.invoke_dismiss_menu();
+    slint::platform::update_timers_and_animations();
+
+    let disk = element(&w, "Disk storage");
+    pointer(&w, center(&disk), PointerEventButton::Right);
+    slint::platform::update_timers_and_animations();
+    let disk_menu = element(&w, "Disk actions");
+    assert_inside(&disk_menu, 1080., 720.);
+    for label in ["Open", "Open in new tab", "Open terminal here", "Copy mount path", "Properties"] {
+        let _ = popup_action(&w, label, &disk_menu);
+    }
+    w.invoke_dismiss_menu();
+    slint::platform::update_timers_and_animations();
+
+    let tabs = element(&w, "Tabs");
+    let tab = popup_action(&w, "Documents", &tabs);
+    pointer(&w, center(&tab), PointerEventButton::Right);
+    slint::platform::update_timers_and_animations();
+    let tab_menu = element(&w, "Tab actions");
+    assert_inside(&tab_menu, 1080., 720.);
+    for label in ["Close tab", "Close other tabs", "Duplicate tab", "Copy path"] {
+        let _ = popup_action(&w, label, &tab_menu);
+    }
+    w.invoke_dismiss_menu();
+    slint::platform::update_timers_and_animations();
+}
+
+#[test]
+fn breadcrumbs_tab_overflow_conflict_dialog_and_split_preview_work() {
+    i_slint_backend_testing::init_no_event_loop();
+    let w = FilesWindow::new().unwrap();
+    let theme = rix_config::ThemeSettings::default();
+    theme_bindings::apply(w.global::<Theme>(), w.global::<Palette>(), &theme);
+    populate(&w, &theme);
+    w.on_next_menu_index(|items, current, direction| {
+        let len = items.row_count() as i32;
+        if len == 0 {
+            return -1;
+        }
+        let mut idx = if current < 0 {
+            if direction < 0 { len - 1 } else { 0 }
+        } else {
+            (current + direction).clamp(0, len - 1)
+        };
+        while let Some(item) = items.row_data(idx as usize) {
+            if item.enabled && !item.separator {
+                return idx;
+            }
+            idx += if direction < 0 { -1 } else { 1 };
+            if idx < 0 || idx >= len {
+                break;
+            }
+        }
+        -1
+    });
+    let navigated = Rc::new(RefCell::new(String::new()));
+    let nav_ref = navigated.clone();
+    w.on_navigate(move |p| *nav_ref.borrow_mut() = p.to_string());
+    w.set_breadcrumbs(model(vec![
+        BreadcrumbSegment {
+            label: "/".into(),
+            path: "/".into(),
+        },
+        BreadcrumbSegment {
+            label: "home".into(),
+            path: "/home".into(),
+        },
+        BreadcrumbSegment {
+            label: "Workspace".into(),
+            path: "/home/Workspace".into(),
+        },
+    ]));
+    w.window().set_size(slint::LogicalSize::new(760., 560.));
+    w.show().unwrap();
+    slint::platform::update_timers_and_animations();
+
+    let home_crumb = element(&w, "home");
+    pointer(&w, center(&home_crumb), PointerEventButton::Left);
+    assert_eq!(*navigated.borrow(), "/home");
+
+    w.set_tabs(model(
+        (0..10)
+            .map(|i| TabItem {
+                label: format!("Folder {i}").into(),
+                tooltip: format!("/tmp/Folder {i}").into(),
+            })
+            .collect(),
+    ));
+    slint::platform::update_timers_and_animations();
+    let new_tab = element(&w, "New tab");
+    assert_inside(&new_tab, 760., 560.);
+    let _ = element(&w, "Scroll tabs left");
+    let _ = element(&w, "Scroll tabs right");
+
+    let resolved = Rc::new(RefCell::new(None::<(String, bool)>));
+    let res_ref = resolved.clone();
+    w.on_resolve_conflict(move |choice, apply_all| {
+        *res_ref.borrow_mut() = Some((choice.to_string(), apply_all));
+    });
+    w.set_dialog_kind(11);
+    w.set_dialog_apply_all(true);
+    slint::platform::update_timers_and_animations();
+    let replace = element(&w, "Replace");
+    pointer(&w, center(&replace), PointerEventButton::Left);
+    assert_eq!(*resolved.borrow(), Some(("replace".into(), true)));
+    w.set_dialog_kind(0);
+
+    let preview = w.global::<FilePreview>();
+    preview.set_title("notes.txt".into());
+    preview.set_subtitle("Plain text".into());
+    preview.set_kind(2);
+    preview.set_body("Hello RixDE".into());
+    preview.set_split_mode(true);
+    preview.set_visible(true);
+    slint::platform::update_timers_and_animations();
+    let contents = element(&w, "Folder contents");
+    assert!(contents.size().width > 200.);
+    assert!(contents.size().width < 600.);
 }

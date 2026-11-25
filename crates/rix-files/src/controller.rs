@@ -20,13 +20,13 @@ pub(crate) fn menu_width(items: ModelRc<MenuItem>, font_size: f32, _base_width: 
         } else {
             item.shortcut.chars().count() as f32 * font_size * 0.55 + 16.
         };
-        let icon_w = if item.checked { 28. } else { 0. };
+        let icon_w = if item.checked || item.checkable { 28. } else { 0. };
         let total_w = 28. + icon_w + text_w + shortcut_w;
         if total_w > max_item_width {
             max_item_width = total_w;
         }
     }
-    max_item_width.clamp(130., 280.)
+    max_item_width.clamp(130., 320.)
 }
 
 fn place_at(items: ModelRc<PlaceItem>, y: f32, row: f32, group: f32) -> i32 {
@@ -519,11 +519,62 @@ impl App {
                     tab.descending = false;
                 }
                 self.prefs.sort = sort;
+                self.prefs.descending = tab.descending;
                 fs::sort_entries(&mut tab.entries, tab.sort, tab.descending);
                 tab.anchor = None;
                 tab.focus = None;
                 self.save();
                 self.render();
+            }
+            "sort-order" => {
+                tab.descending = !tab.descending;
+                self.prefs.descending = tab.descending;
+                fs::sort_entries(&mut tab.entries, tab.sort, tab.descending);
+                tab.anchor = None;
+                tab.focus = None;
+                self.save();
+                self.render();
+            }
+            "grid-size-0" | "grid-size-1" | "grid-size-2" => {
+                self.prefs.grid_size = match action {
+                    "grid-size-0" => 0,
+                    "grid-size-2" => 2,
+                    _ => 1,
+                };
+                self.save();
+                self.render();
+            }
+            "open-tab" => {
+                if let Some(path) = tab
+                    .selected_one()
+                    .filter(|p| p.is_dir())
+                    .map(Path::to_path_buf)
+                {
+                    self.add_tab(path);
+                }
+            }
+            "extract-here" => {
+                if let Some(path) = tab
+                    .selected_one()
+                    .filter(|p| p.is_file() && rix_files::archive::supported(p))
+                    .map(Path::to_path_buf)
+                {
+                    self.extract_here(path);
+                }
+            }
+            "duplicate" => {
+                if tab.path != Path::new("trash:") {
+                    let paths = tab.selected_paths();
+                    let dest = tab.path.clone();
+                    if !paths.is_empty() {
+                        self.start_operation_with_policy(
+                            Kind::Copy,
+                            paths,
+                            Some(dest),
+                            ConflictPolicy::KeepBoth,
+                        );
+                    }
+                }
             }
             "select-all" => {
                 tab.selected = tab.entries.iter().map(|e| e.path.clone()).collect();
@@ -885,6 +936,10 @@ impl App {
             self.action("preview");
             return;
         }
+        if (text == char::from(Key::Backspace).to_string() || text == "\u{8}") && !ctrl && !alt && !shift {
+            self.action("up");
+            return;
+        }
         let navigation = [
             Key::UpArrow,
             Key::DownArrow,
@@ -943,6 +998,9 @@ impl App {
                 "a" => self.action("select-all"),
                 "c" if shift => self.action("copy-path"),
                 "c" => self.action("copy"),
+                "d" => self.action("duplicate"),
+                "1" => self.action("list"),
+                "2" => self.action("grid"),
                 "x" => self.action("cut"),
                 "v" => self.action("paste"),
                 "h" => self.action("hidden"),
@@ -1021,6 +1079,32 @@ impl App {
                 index.saturating_add(page_step).min(tab.entries.len() - 1)
             } else if text == char::from(Key::PageUp).to_string() {
                 index.saturating_sub(page_step)
+            } else if !ctrl
+                && !alt
+                && text.chars().count() == 1
+                && text.chars().next().is_some_and(|c| !c.is_control())
+            {
+                let now = Instant::now();
+                if self.type_ahead_due.is_none_or(|due| now > due) {
+                    self.type_ahead.clear();
+                }
+                self.type_ahead.push_str(&text.to_lowercase());
+                self.type_ahead_due = Some(now + Duration::from_millis(850));
+                let query = &self.type_ahead;
+                if let Some(found) = tab
+                    .entries
+                    .iter()
+                    .position(|e| e.name.to_lowercase().starts_with(query))
+                    .or_else(|| {
+                        tab.entries
+                            .iter()
+                            .position(|e| e.name.to_lowercase().contains(query))
+                    })
+                {
+                    found
+                } else {
+                    return;
+                }
             } else {
                 return;
             };
@@ -1046,24 +1130,29 @@ impl App {
         }
         self.operation = None;
         OPERATION_TIMER.with(|t| *t.borrow_mut() = None);
+        if let Some(path) = report.completed.last().filter(|p| p.exists()).cloned() {
+            self.pending_reveal_path = Some(path);
+        }
 
         self.load();
-        self.notice = Some(format!(
-            "{}{}",
-            translated(
-                "{completed} completed · {skipped} skipped",
-                &[
-                    ("completed", report.completed.len().to_string()),
-                    ("skipped", report.skipped.len().to_string())
-                ]
+        self.set_notice(
+            false,
+            format!(
+                "{}{}",
+                translated(
+                    "{completed} completed · {skipped} skipped",
+                    &[
+                        ("completed", report.completed.len().to_string()),
+                        ("skipped", report.skipped.len().to_string())
+                    ]
+                ),
+                if report.cancelled {
+                    i18n::tr(" · cancelled").to_string()
+                } else {
+                    String::new()
+                }
             ),
-            if report.cancelled {
-                i18n::tr(" · cancelled").to_string()
-            } else {
-                String::new()
-            }
-        ));
-        self.render();
+        );
         if !report.errors.is_empty() {
             self.error(report.errors.join("\n"));
         }
@@ -1124,7 +1213,25 @@ impl App {
                     for item in trash {
                         self.trash_items.insert(PathBuf::from(&item.id), item);
                     }
+                    let mut reveal_idx = None;
+                    if self.tabs[self.active].id == id {
+                        if let Some(target) = self.pending_reveal_path.take() {
+                            if let Some(idx) = self.tabs[self.active]
+                                .entries
+                                .iter()
+                                .position(|e| e.path == target)
+                            {
+                                self.tabs[self.active].select(idx, false, false);
+                                reveal_idx = Some(idx);
+                            }
+                        }
+                    }
                     self.render();
+                    if let Some(idx) = reveal_idx {
+                        if let Some(w) = self.window.upgrade() {
+                            w.invoke_reveal_entry(idx as i32);
+                        }
+                    }
                     if self.tabs[self.active].id == id {
                         self.watch();
                     }
@@ -1180,6 +1287,47 @@ impl App {
                 self.finish_operation(report);
             }
             Message::Error(e) => self.error(e),
+            Message::MountedDisks(disks) => {
+                self.disks = disks;
+                if let Some(w) = self.window.upgrade() {
+                    self.render_disk(&w);
+                }
+            }
+            Message::Thumbnail {
+                path,
+                size,
+                rgba,
+                width,
+                height,
+            } => {
+                self.thumbnail_pending.remove(&path);
+                if width > 0 && height > 0 {
+                    if self.thumbnails.len() > 256 {
+                        self.thumbnails.clear();
+                    }
+                    let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+                        &rgba, width, height,
+                    );
+                    self.thumbnails
+                        .insert((path, size), Image::from_rgba8(buf));
+                    self.render();
+                }
+            }
+            Message::PasteAvailable(available) => {
+                if self.system_paste_available != available {
+                    self.system_paste_available = available;
+                    if let Some(w) = self.window.upgrade() {
+                        w.set_paste_available(!self.clipboard.is_empty() || self.system_paste_available);
+                    }
+                }
+            }
+            Message::ClearNotice(gen) => {
+                if self.notice_generation == gen {
+                    self.notice = None;
+                    self.notice_error = false;
+                    self.render();
+                }
+            }
             Message::Properties {
                 request,
                 paths,
@@ -1506,6 +1654,10 @@ async fn run_until_closed() -> anyhow::Result<()> {
         .select()?;
     slint::set_xdg_app_id(APPLICATION_ID)?;
     let window = FilesWindow::new()?;
+    window.window().set_size(slint::LogicalSize::new(
+        window.get_initial_width(),
+        window.get_initial_height(),
+    ));
     rix_files::keyboard::install(window.window());
     let desktop = load_desktop();
     let _ = i18n::select_language(&desktop.language);
@@ -1702,6 +1854,14 @@ async fn run_until_closed() -> anyhow::Result<()> {
         window.on_switch_tab(move |i| {
             let mut a = app.borrow_mut();
             if i >= 0 && (i as usize) < a.tabs.len() {
+                if let Some(w) = a.window.upgrade() {
+                    let current = a.active;
+                    a.tabs[current].scroll_y = if a.prefs.grid_view {
+                        w.get_grid_viewport_y()
+                    } else {
+                        w.get_list_viewport_y()
+                    };
+                }
                 a.invalidate_properties_metadata();
                 a.active = i as usize;
                 if a.tabs[a.active].entries.is_empty() {
@@ -1709,6 +1869,11 @@ async fn run_until_closed() -> anyhow::Result<()> {
                 } else {
                     a.render();
                     a.watch();
+                }
+                if let Some(w) = a.window.upgrade() {
+                    let scroll = a.tabs[a.active].scroll_y;
+                    w.set_list_viewport_y(scroll);
+                    w.set_grid_viewport_y(scroll);
                 }
             }
         });
@@ -1730,6 +1895,75 @@ async fn run_until_closed() -> anyhow::Result<()> {
     {
         let app = app.clone();
         window.on_open_disk(move || app.borrow_mut().open_disk());
+    }
+    {
+        let app = app.clone();
+        window.on_open_disk_at(move |i| {
+            if let Ok(index) = usize::try_from(i) {
+                app.borrow_mut().open_disk_at(index);
+            }
+        });
+    }
+    {
+        let app = app.clone();
+        window.on_action_on_disk(move |action, i| {
+            if let Ok(index) = usize::try_from(i) {
+                app.borrow_mut().action_on_disk(&action, index);
+            }
+        });
+    }
+    {
+        let app = app.clone();
+        window.on_action_on_entry(move |action, i| {
+            if action == "open-tab" {
+                let mut a = app.borrow_mut();
+                if let Some(entry) = a.tabs[a.active].entries.get(i as usize).filter(|e| e.is_dir) {
+                    let path = entry.path.clone();
+                    a.add_tab(path);
+                }
+            }
+        });
+    }
+    {
+        let app = app.clone();
+        window.on_dismiss_notice(move || app.borrow_mut().dismiss_notice());
+    }
+    {
+        let app = app.clone();
+        window.on_resolve_conflict(move |choice, apply_all| {
+            app.borrow_mut().resolve_conflict(&choice, apply_all);
+        });
+    }
+    {
+        let app = app.clone();
+        window.on_scroll_changed(move || {
+            let mut a = app.borrow_mut();
+            if let Some(w) = a.window.upgrade() {
+                let current = a.active;
+                a.tabs[current].scroll_y = if a.prefs.grid_view {
+                    w.get_grid_viewport_y()
+                } else {
+                    w.get_list_viewport_y()
+                };
+            }
+        });
+    }
+    {
+        let app = app.clone();
+        window.on_control_key_in_field(move |text, shift, alt| {
+            let mapped = rix_files::keyboard::control_letter(&text)
+                .map(|ch| ch.to_string())
+                .unwrap_or_else(|| text.to_string());
+            if matches!(
+                mapped.as_str(),
+                "l" | "L" | "f" | "F" | "t" | "T" | "w" | "W"
+            ) {
+                app.borrow_mut().key(&mapped, true, shift, alt);
+                true
+            } else {
+                false
+            }
+        });
     }
     {
         let app = app.clone();
@@ -1814,6 +2048,14 @@ async fn run_until_closed() -> anyhow::Result<()> {
         window
             .global::<PropertiesView>()
             .on_copy_paths(move || app.borrow().copy_property_paths());
+    }
+    {
+        let app = app.clone();
+        window
+            .global::<PropertiesView>()
+            .on_toggle_permission(move |group, bit| {
+                app.borrow_mut().toggle_permission(group, bit);
+            });
     }
     {
         let app = app.clone();

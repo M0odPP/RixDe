@@ -96,6 +96,8 @@ pub fn install(window: &FilesWindow, popup: Rc<RefCell<native_popup::NativePopup
                         separator: item.separator,
                         destructive: item.destructive,
                         checked: item.checked,
+                        checkable: false,
+                        radio: false,
                     })
                     .collect(),
                 title: title.to_string(),

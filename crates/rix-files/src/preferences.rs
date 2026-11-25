@@ -11,6 +11,9 @@ pub struct Preferences {
     pub show_hidden: bool,
     pub grid_view: bool,
     pub sort: SortBy,
+    pub descending: bool,
+    pub grid_size: u8,
+    pub preview_split: bool,
     #[serde(with = "bookmark_paths")]
     pub bookmarks: Vec<PathBuf>,
     #[serde(with = "bookmark_paths")]

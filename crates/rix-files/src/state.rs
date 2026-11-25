@@ -19,6 +19,7 @@ pub struct Tab {
     pub show_hidden: bool,
     pub sort: SortBy,
     pub descending: bool,
+    pub scroll_y: f32,
     pub loading: bool,
     pub search_limited: bool,
     pub error: Option<String>,
@@ -49,6 +50,7 @@ impl Tab {
             show_hidden,
             sort,
             descending: false,
+            scroll_y: 0.0,
             loading: false,
             search_limited: false,
             error: None,
@@ -64,6 +66,7 @@ impl Tab {
             self.clear_snapshot();
         }
         if self.path != path {
+            self.scroll_y = 0.0;
             self.history.truncate(self.cursor + 1);
             self.history.push(path.clone());
             if self.history.len() > 256 {
@@ -239,6 +242,7 @@ mod tests {
                 name: (*name).into(),
                 is_dir: false,
                 is_symlink: false,
+                broken_symlink: false,
                 size: 0,
                 modified: None,
                 kind: "File".into(),

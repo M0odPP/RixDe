@@ -106,6 +106,16 @@ enum Message {
     Error(String),
     ClipboardError(String),
     Apps(PathBuf, opening::ApplicationChoices),
+    MountedDisks(Vec<storage::DiskUsage>),
+    Thumbnail {
+        path: PathBuf,
+        size: u64,
+        rgba: Vec<u8>,
+        width: u32,
+        height: u32,
+    },
+    PasteAvailable(bool),
+    ClearNotice(u64),
     Incoming(Vec<IncomingLocation>),
     Properties {
         request: u64,
@@ -133,6 +143,62 @@ struct Place {
     icon: String,
     builtin: bool,
 }
+struct PendingConflict {
+    kind: Kind,
+    sources: Vec<PathBuf>,
+    destination: PathBuf,
+}
+fn path_breadcrumbs(path: &Path) -> Vec<BreadcrumbSegment> {
+    if path == Path::new("trash:") {
+        return vec![BreadcrumbSegment {
+            label: i18n::tr("Trash"),
+            path: "trash:".into(),
+        }];
+    }
+    let home_dir = home();
+    if home_dir != Path::new("/") {
+        if let Ok(rel) = path.strip_prefix(&home_dir) {
+            let mut segments = vec![BreadcrumbSegment {
+                label: i18n::tr("Home"),
+                path: home_dir.to_string_lossy().into_owned().into(),
+            }];
+            let mut accum = home_dir;
+            for part in rel.components() {
+                if let std::path::Component::Normal(name) = part {
+                    accum.push(name);
+                    segments.push(BreadcrumbSegment {
+                        label: name.to_string_lossy().into_owned().into(),
+                        path: accum.to_string_lossy().into_owned().into(),
+                    });
+                }
+            }
+            return segments;
+        }
+    }
+    let mut segments = Vec::new();
+    let mut accum = PathBuf::new();
+    for component in path.components() {
+        use std::path::Component;
+        match component {
+            Component::RootDir => {
+                accum.push("/");
+                segments.push(BreadcrumbSegment {
+                    label: "/".into(),
+                    path: "/".into(),
+                });
+            }
+            Component::Normal(part) => {
+                accum.push(part);
+                segments.push(BreadcrumbSegment {
+                    label: part.to_string_lossy().into_owned().into(),
+                    path: accum.to_string_lossy().into_owned().into(),
+                });
+            }
+            _ => {}
+        }
+    }
+    segments
+}
 struct App {
     history: history::History,
     content: content::State,
@@ -153,6 +219,7 @@ struct App {
     icons: HashMap<String, Image>,
     resolver: rix_assets::IconResolver,
     places: Vec<Place>,
+    disks: Vec<storage::DiskUsage>,
     disk_path: Option<PathBuf>,
     disk_usage: Option<storage::DiskUsage>,
     disk_request: Option<u64>,
@@ -179,6 +246,15 @@ struct App {
     application_choices: Option<opening::ApplicationChoices>,
     trash_items: HashMap<PathBuf, trash::TrashItem>,
     notice: Option<String>,
+    notice_error: bool,
+    notice_generation: u64,
+    thumbnails: HashMap<(PathBuf, u64), Image>,
+    thumbnail_pending: std::collections::HashSet<PathBuf>,
+    pending_reveal_path: Option<PathBuf>,
+    system_paste_available: bool,
+    pending_conflict: Option<PendingConflict>,
+    type_ahead: String,
+    type_ahead_due: Option<Instant>,
     preference_writes: Arc<std::sync::Mutex<PreferenceWrites>>,
     preference_directory: PathBuf,
 }
@@ -276,10 +352,21 @@ fn size(bytes: u64) -> String {
     }
 }
 fn date(value: Option<SystemTime>) -> String {
+    use chrono::Datelike;
     value
         .map(|v| {
             let dt: chrono::DateTime<chrono::Local> = v.into();
-            dt.format("%Y-%m-%d %H:%M").to_string()
+            let today = chrono::Local::now().date_naive();
+            let d = dt.date_naive();
+            if d == today {
+                format!("{} {}", i18n::tr("Today"), dt.format("%H:%M"))
+            } else if d.succ_opt() == Some(today) {
+                format!("{} {}", i18n::tr("Yesterday"), dt.format("%H:%M"))
+            } else if d.year() == today.year() {
+                dt.format("%d %b %H:%M").to_string()
+            } else {
+                dt.format("%Y-%m-%d").to_string()
+            }
         })
         .unwrap_or_default()
 }
@@ -401,6 +488,8 @@ impl App {
         if prefs.sidebar_collapsed {
             window.set_sidebar_collapsed(true);
         }
+        window.set_grid_size(prefs.grid_size as i32);
+        window.global::<FilePreview>().set_split_mode(prefs.preview_split);
         Self {
             history: history::History::default(),
             window: window.as_weak(),
@@ -414,6 +503,7 @@ impl App {
             tabs,
             active: 0,
             places: places(&prefs),
+            disks: vec![],
             disk_path: None,
             disk_usage: None,
             disk_request: None,
@@ -447,9 +537,91 @@ impl App {
             application_choices: None,
             trash_items: HashMap::new(),
             notice: None,
+            notice_error: false,
+            notice_generation: 0,
+            thumbnails: HashMap::new(),
+            thumbnail_pending: std::collections::HashSet::new(),
+            pending_reveal_path: None,
+            system_paste_available: false,
+            pending_conflict: None,
+            type_ahead: String::new(),
+            type_ahead_due: None,
             preference_writes: Arc::new(std::sync::Mutex::new(PreferenceWrites::default())),
             preference_directory: preferences::config_directory(),
         }
+    }
+    fn set_notice(&mut self, error: bool, message: impl Into<String>) {
+        self.notice_generation = self.notice_generation.wrapping_add(1);
+        let gen = self.notice_generation;
+        self.notice = Some(message.into());
+        self.notice_error = error;
+        let sender = self.sender.clone();
+        slint::Timer::single_shot(Duration::from_millis(4500), move || {
+            let _ = sender.send(Message::ClearNotice(gen));
+        });
+        self.render();
+    }
+    fn dismiss_notice(&mut self) {
+        self.notice_generation = self.notice_generation.wrapping_add(1);
+        self.notice = None;
+        self.notice_error = false;
+        self.render();
+    }
+    fn request_thumbnail(&mut self, entry: &Entry) -> Option<Image> {
+        if entry.is_dir || entry.broken_symlink || entry.size == 0 || entry.size > 16 * 1024 * 1024 {
+            return None;
+        }
+        let ext = entry
+            .path
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_ascii_lowercase())?;
+        if !matches!(
+            ext.as_str(),
+            "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "ico"
+        ) {
+            return None;
+        }
+        let key = (entry.path.clone(), entry.size);
+        if let Some(image) = self.thumbnails.get(&key) {
+            return Some(image.clone());
+        }
+        if self.thumbnail_pending.len() >= 16 || !self.thumbnail_pending.insert(entry.path.clone()) {
+            return None;
+        }
+        let path = entry.path.clone();
+        let size = entry.size;
+        let sender = self.sender.clone();
+        tokio::task::spawn_blocking(move || {
+            let decoded = image::ImageReader::open(&path)
+                .ok()
+                .and_then(|reader| reader.with_guessed_format().ok())
+                .and_then(|reader| reader.decode().ok());
+            if let Some(img) = decoded {
+                let thumb = img.thumbnail(128, 128).to_rgba8();
+                let (width, height) = thumb.dimensions();
+                let _ = sender.send(Message::Thumbnail {
+                    path,
+                    size,
+                    rgba: thumb.into_raw(),
+                    width,
+                    height,
+                });
+            }
+        });
+        None
+    }
+    fn refresh_paste_available(&self) {
+        if !self.clipboard.is_empty() {
+            return;
+        }
+        let sender = self.sender.clone();
+        tokio::task::spawn_blocking(move || {
+            let has_files = rix_files::clipboard::read()
+                .map(|(paths, _)| !paths.is_empty())
+                .unwrap_or(false);
+            let _ = sender.send(Message::PasteAvailable(has_files));
+        });
     }
     fn icon(&mut self, name: &str) -> Image {
         let path = Path::new(name);
@@ -603,11 +775,26 @@ impl App {
             })
             .collect();
         let mut items = Vec::with_capacity(data.len());
+        let tab_path = self.tabs[self.active].path.clone();
+        let searching = !self.tabs[self.active].query.is_empty();
         for (e, selected, focused) in data {
-            let icon = self.file_icon(&e);
+            let icon = self
+                .request_thumbnail(&e)
+                .unwrap_or_else(|| self.file_icon(&e));
             let is_hidden = e.name.starts_with('.');
+            let subpath = if searching && tab_path != Path::new("trash:") {
+                e.path
+                    .parent()
+                    .and_then(|p| p.strip_prefix(&tab_path).ok())
+                    .filter(|rel| !rel.as_os_str().is_empty())
+                    .map(|rel| rel.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
             items.push(FileItem {
                 name: e.name.into(),
+                subpath: subpath.into(),
                 detail: if self.tabs[self.active].path == Path::new("trash:") {
                     e.kind.into()
                 } else {
@@ -622,7 +809,9 @@ impl App {
                 modified: date(e.modified).into(),
                 icon,
                 is_dir: e.is_dir,
+                is_archive: !e.is_dir && rix_files::archive::supported(&e.path),
                 is_symlink: e.is_symlink,
+                broken_symlink: e.broken_symlink,
                 selected,
                 cut: self.cut && self.clipboard.contains(&e.path),
                 focused,
@@ -663,9 +852,17 @@ impl App {
                             .into_owned()
                     }
                     .into(),
+                    tooltip: if t.path == Path::new("trash:") {
+                        i18n::tr("Trash").to_string()
+                    } else {
+                        t.path.to_string_lossy().into_owned()
+                    }
+                    .into(),
                 })
                 .collect(),
         ));
+        let breadcrumbs = path_breadcrumbs(&self.tabs[self.active].path);
+        window.set_breadcrumbs(model(breadcrumbs));
         let active_place = active_place(&self.places, &self.tabs[self.active].path);
         let mut previous_builtin = true;
         let places_data: Vec<_> = self
@@ -715,10 +912,19 @@ impl App {
             SortBy::Modified => 2,
             SortBy::Kind => 3,
         });
+        window.set_sort_descending(tab.descending);
         window.set_grid_view(self.prefs.grid_view);
+        window.set_grid_size(self.prefs.grid_size as i32);
         window.set_selection_count(tab.selected.len() as i32);
         window.set_trash_count(self.trash_items.len() as i32);
-        window.set_paste_available(true);
+        window.set_paste_available(!self.clipboard.is_empty() || self.system_paste_available);
+        window.set_notice_text(
+            self.notice
+                .as_deref()
+                .map(i18n::tr)
+                .unwrap_or_default(),
+        );
+        window.set_notice_error(self.notice_error);
         window.set_trash_view(tab.path == Path::new("trash:"));
         window.set_operation_active(self.operation.is_some());
         window.set_can_undo(
@@ -740,14 +946,18 @@ impl App {
                 .clone()
                 .or_else(|| tab.error.clone())
                 .unwrap_or_else(|| {
+                    let count = tab.entries.len();
+                    let items_label = if count == 1 {
+                        i18n::tr("1 item").to_string()
+                    } else {
+                        translated("{count} items", &[("count", count.to_string())])
+                    };
                     format!(
-                        "{}{}",
+                        "{} · {}{}",
+                        items_label,
                         translated(
-                            "{count} items · {selected} selected",
-                            &[
-                                ("count", tab.entries.len().to_string()),
-                                ("selected", tab.selected.len().to_string())
-                            ]
+                            "{selected} selected",
+                            &[("selected", tab.selected.len().to_string())]
                         ),
                         if tab.search_limited && !tab.query.is_empty() {
                             i18n::tr(" · search limited by time").to_string()
@@ -819,7 +1029,12 @@ impl App {
         self.tabs[self.active].end_rectangle(true);
         self.disk_refresh_due = Instant::now();
         self.search_due = None;
-        self.notice = None;
+        self.refresh_paste_available();
+        let search_recursive = self
+            .window
+            .upgrade()
+            .map(|w| w.get_search_recursive())
+            .unwrap_or(true);
         let tab = &mut self.tabs[self.active];
         tab.cancellation.store(true, Ordering::Relaxed);
         tab.cancellation = Arc::new(AtomicBool::new(false));
@@ -864,6 +1079,7 @@ impl App {
                                     name: item.name.to_string_lossy().into_owned(),
                                     is_dir,
                                     is_symlink: false,
+                                    broken_symlink: false,
                                     size: metadata.and_then(|m| m.size.size()).unwrap_or(0),
                                     modified: (item.time_deleted >= 0).then(|| {
                                         SystemTime::UNIX_EPOCH
@@ -893,9 +1109,16 @@ impl App {
                             fs::read_directory(&path, hidden, sort, descending, &cancel)
                                 .map_err(|e| e.to_string())
                         } else {
-                            let outcome =
-                                fs::search_directory_with_status(&path, &query, hidden, &cancel)
-                                    .map_err(|e| e.to_string())?;
+                            let outcome = fs::search_directory_sorted(
+                                &path,
+                                &query,
+                                hidden,
+                                sort,
+                                descending,
+                                search_recursive,
+                                &cancel,
+                            )
+                            .map_err(|e| e.to_string())?;
                             search_limited = outcome.stop == fs::SearchStop::Deadline;
                             Ok(outcome.entries)
                         }
@@ -997,11 +1220,32 @@ impl App {
             if w.get_dialog_kind() == 0 {
                 w.global::<DialogBackdrop>().invoke_prepare();
             }
+            let select_end = if kind == 2 {
+                let is_dir = self
+                    .dialog_paths
+                    .first()
+                    .and_then(|p| std::fs::symlink_metadata(p).ok())
+                    .is_some_and(|m| m.is_dir());
+                if !is_dir {
+                    value
+                        .rfind('.')
+                        .filter(|&dot| dot > 0)
+                        .map(|dot| dot as i32)
+                        .unwrap_or(-1)
+                } else {
+                    -1
+                }
+            } else {
+                -1
+            };
+            w.set_dialog_error("".into());
+            w.set_dialog_select_end(select_end);
+            w.set_dialog_apply_all(false);
             w.set_dialog_title(i18n::tr(title));
             w.set_dialog_text(i18n::tr(&text));
             w.set_dialog_value(value.into());
             w.set_dialog_kind(kind);
-            if kind == 1 || kind == 2 || kind == 6 {
+            if kind == 1 || kind == 2 || kind == 3 || kind == 6 || kind == 11 {
                 w.invoke_focus_dialog();
             }
         }
@@ -1013,6 +1257,7 @@ impl App {
         self.properties_summary = None;
         self.dialog_kind = 0;
         self.dialog_paths.clear();
+        self.pending_conflict = None;
         self.application_path = None;
         self.application_choices = None;
         self.applications.clear();
@@ -1064,6 +1309,78 @@ impl App {
         if self.operation.is_some() || paths.is_empty() {
             return;
         }
+        if matches!(kind, Kind::Copy | Kind::Move) {
+            if let Some(dest) = destination.as_ref() {
+                let conflicts: Vec<PathBuf> = paths
+                    .iter()
+                    .filter_map(|src| {
+                        let name = src.file_name()?;
+                        let target = dest.join(name);
+                        (target != *src && target.symlink_metadata().is_ok()).then_some(target)
+                    })
+                    .collect();
+                if !conflicts.is_empty() {
+                    let first_name = conflicts[0]
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned();
+                    let text = if conflicts.len() == 1 {
+                        translated(
+                            "“{name}” already exists in this folder. What would you like to do?",
+                            &[("name", first_name)],
+                        )
+                    } else {
+                        translated(
+                            "“{name}” and {count} other items already exist in this folder.",
+                            &[
+                                ("name", first_name),
+                                ("count", (conflicts.len() - 1).to_string()),
+                            ],
+                        )
+                    };
+                    self.pending_conflict = Some(PendingConflict {
+                        kind,
+                        sources: paths,
+                        destination: dest.clone(),
+                    });
+                    self.dialog(11, "File already exists", text, vec![], String::new());
+                    return;
+                }
+            }
+        }
+        self.start_operation_with_policy(kind, paths, destination, ConflictPolicy::KeepBoth);
+    }
+
+    fn resolve_conflict(&mut self, choice: &str, _apply_all: bool) {
+        let Some(pending) = self.pending_conflict.take() else {
+            self.dismiss();
+            return;
+        };
+        let policy = match choice {
+            "skip" => ConflictPolicy::Skip,
+            "replace" => ConflictPolicy::Replace,
+            _ => ConflictPolicy::KeepBoth,
+        };
+        self.dismiss();
+        self.start_operation_with_policy(
+            pending.kind,
+            pending.sources,
+            Some(pending.destination),
+            policy,
+        );
+    }
+
+    fn start_operation_with_policy(
+        &mut self,
+        kind: Kind,
+        paths: Vec<PathBuf>,
+        destination: Option<PathBuf>,
+        conflict: ConflictPolicy,
+    ) {
+        if self.operation.is_some() || paths.is_empty() {
+            return;
+        }
         let cancel = Arc::new(AtomicBool::new(false));
         self.operation = Some(cancel.clone());
         if let Some(w) = self.window.upgrade() {
@@ -1106,7 +1423,7 @@ impl App {
                     kind,
                     sources: paths,
                     destination,
-                    conflict: ConflictPolicy::KeepBoth,
+                    conflict,
                 },
                 &cancel,
                 |p| {

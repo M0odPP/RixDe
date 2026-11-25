@@ -428,6 +428,7 @@ async fn trash_view_delete_key_triggers_permanent_delete_dialog() {
         modified: Some(std::time::SystemTime::UNIX_EPOCH),
         is_dir: false,
         is_symlink: false,
+        broken_symlink: false,
         kind: "text/plain".into(),
         icon_name: "text-plain".into(),
         icon_names: vec![],

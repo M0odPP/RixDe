@@ -386,6 +386,7 @@ pub enum Kind {
 pub enum ConflictPolicy {
     Skip,
     KeepBoth,
+    Replace,
 }
 #[derive(Clone, Debug)]
 pub struct Request {
@@ -505,6 +506,15 @@ fn destination_for(
     }
     if matches!(conflict, ConflictPolicy::Skip) {
         return Ok(None);
+    }
+    if matches!(conflict, ConflictPolicy::Replace) && destination != source {
+        let meta = fs::symlink_metadata(&destination)?;
+        if meta.is_dir() && !meta.is_symlink() {
+            fs::remove_dir_all(&destination)?;
+        } else {
+            fs::remove_file(&destination)?;
+        }
+        return Ok(Some(destination));
     }
     let stem = source.file_stem().unwrap_or(name);
     let ext = if source.is_dir() {

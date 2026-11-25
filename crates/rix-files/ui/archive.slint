@@ -18,6 +18,7 @@ export global ArchiveBrowser {
     callback up();
     callback close();
     callback extract();
+    callback extract-selected(int);
     callback unlock(string);
 }
 export component ArchivePanel inherits Rectangle {
@@ -25,6 +26,8 @@ export component ArchivePanel inherits Rectangle {
 
     background: root.desktop-material ? transparent : Theme.window-background.with-alpha(1);
     private property <bool> show-password;
+    private property <string> archive-message: ArchiveBrowser.message;
+    changed archive-message => { if ArchiveBrowser.message == "" { root.show-password = false; } }
     forward-focus: keys;
     public function focus-browser() { keys.focus(); }
     TouchArea {}
@@ -52,10 +55,11 @@ export component ArchivePanel inherits Rectangle {
                     Text { text: @tr("Archive") + " · " + ArchiveBrowser.summary; color: Theme.text-secondary; overflow: elide; }
                 }
                 Button { text: @tr("Password…"); clicked => { root.show-password = !root.show-password; } }
+                Button { text: @tr("Extract Selected…"); visible: ArchiveBrowser.selected-index >= 0; enabled: !ArchiveBrowser.busy && ArchiveBrowser.message == ""; clicked => { ArchiveBrowser.extract-selected(ArchiveBrowser.selected-index); } }
                 Button { text: @tr("Extract…"); active: true; enabled: !ArchiveBrowser.busy && ArchiveBrowser.summary != "" && ArchiveBrowser.message == ""; clicked => { ArchiveBrowser.extract(); } }
-                Button { text: @tr("Close"); clicked => { ArchiveBrowser.close(); } }
+                IconButton { icon: @image-url("../assets/close.svg"); accessible-name: @tr("Close"); clicked => { ArchiveBrowser.close(); } }
             }
-            Rectangle { height: 1px; background: Theme.divider; }
+            Rectangle { height: 1px; background: Theme.border; }
             HorizontalLayout { spacing: Theme.default-spacing;
                 Button { text: @tr("Up"); horizontal-stretch: 0; enabled: ArchiveBrowser.can-up && !ArchiveBrowser.busy; clicked => { ArchiveBrowser.up(); } }
                 Text { text: ArchiveBrowser.folder == "" ? "/" : "/" + ArchiveBrowser.folder; horizontal-stretch: 1; color: Theme.text-secondary; overflow: elide; vertical-alignment: center; }
@@ -64,7 +68,11 @@ export component ArchivePanel inherits Rectangle {
                 spacing: Theme.default-spacing;
                 Text { text: ArchiveBrowser.message; color: Theme.text-secondary; wrap: word-wrap; }
                 HorizontalLayout {
-                    Field { placeholder: @tr("Archive password"); text <=> ArchiveBrowser.password; input-type: password; escape => { ArchiveBrowser.close(); } accepted(value) => { ArchiveBrowser.unlock(value); } }
+                    spacing: Theme.default-spacing;
+                    password-field := Field {
+                        init => { if root.show-password { self.focus-input(); } }
+                        placeholder: @tr("Archive password"); text <=> ArchiveBrowser.password; input-type: password; escape => { ArchiveBrowser.close(); } accepted(value) => { ArchiveBrowser.unlock(value); }
+                    }
                     Button { text: @tr("Unlock"); enabled: !ArchiveBrowser.busy; clicked => { ArchiveBrowser.unlock(ArchiveBrowser.password); } }
                 }
             }
@@ -86,7 +94,12 @@ export component ArchivePanel inherits Rectangle {
                                 Text { text: member.detail; color: Theme.text-secondary; font-size: Theme.font-size-sm; overflow: elide; }
                             }
                         }
-                        touch := TouchArea { enabled: !ArchiveBrowser.busy; mouse-cursor: pointer; clicked => { ArchiveBrowser.selected-index = index; ArchiveBrowser.open(index); } }
+                        touch := TouchArea {
+                            enabled: !ArchiveBrowser.busy;
+                            mouse-cursor: pointer;
+                            clicked => { ArchiveBrowser.selected-index = index; keys.focus(); }
+                            double-clicked => { ArchiveBrowser.selected-index = index; ArchiveBrowser.open(index); }
+                        }
                     }
                 }
             }

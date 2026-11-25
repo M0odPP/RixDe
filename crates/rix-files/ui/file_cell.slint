@@ -7,6 +7,7 @@ export component FileCell inherits Rectangle {
     in property <bool> hovered;
     in property <bool> drop-target;
     in property <bool> show-type;
+    in property <length> grid-icon-size: Theme.icon-size-lg * 2;
     in property <length> size-column;
     in property <length> modified-column;
     in property <length> type-column;
@@ -18,8 +19,8 @@ export component FileCell inherits Rectangle {
     border-radius: Theme.radius-sm;
     background: root.drop-target ? Theme.accent.with-alpha(0.16) : root.item.selected ? Theme.surface-active : root.hovered || touch.has-hover ? Theme.surface-hover : transparent;
     animate background { duration: Theme.hover-duration * 1ms; easing: ease-out; }
-    border-width: root.drop-target ? 2px : root.item.selected || root.item.focused ? 1px : 0px;
-    border-color: root.drop-target || root.item.selected || root.item.focused ? Theme.accent : Theme.border;
+    border-width: root.drop-target ? 2px : root.item.focused && !root.item.selected ? 1.5px : root.item.selected ? 1px : 0px;
+    border-color: root.drop-target || (root.item.focused && !root.item.selected) ? Theme.accent : Theme.accent.with-alpha(0.55);
     opacity: root.item.name == "" ? 0 : root.item.cut ? 0.45 : root.item.is-hidden ? 0.6 : 1;
     accessible-role: list-item; accessible-label: root.item.name;
     accessible-item-selectable: root.item.name != ""; accessible-item-selected: root.item.selected;
@@ -29,17 +30,55 @@ export component FileCell inherits Rectangle {
     private property <length> size-left: root.modified-left - Theme.default-spacing - root.size-column;
     if !root.grid: Rectangle {
         Image { x: Theme.default-spacing; y: (parent.height - self.height)/2; source: root.item.icon; width: Theme.icon-size-lg; height: self.width; image-fit: contain; }
-        Text { x: Theme.default-spacing * 2 + Theme.icon-size-lg; y: 0px; width: Math.max(0px, root.size-left - self.x - Theme.default-spacing); height: parent.height; text: root.item.name; color: root.item.is-hidden ? Theme.text-secondary : Theme.text-primary; font-size: Theme.font-size-md; vertical-alignment: center; overflow: elide; }
+        if root.item.is-symlink: Rectangle {
+            x: Theme.default-spacing + Theme.icon-size-lg - self.width + 2px;
+            y: (parent.height + Theme.icon-size-lg) / 2 - self.height + 2px;
+            width: 14px; height: 14px; border-radius: 7px;
+            background: root.item.broken-symlink ? Theme.danger : Theme.surface;
+            border-width: 1px;
+            border-color: root.item.broken-symlink ? Theme.danger : Theme.border;
+            Image {
+                x: 2px; y: 2px; width: 10px; height: 10px;
+                source: @image-url("../assets/symlink.svg");
+                colorize: root.item.broken-symlink ? #ffffff : Theme.text-primary;
+                image-fit: contain;
+            }
+        }
+        Text {
+            x: Theme.default-spacing * 2 + Theme.icon-size-lg;
+            y: 0px;
+            width: Math.max(0px, root.size-left - self.x - Theme.default-spacing);
+            height: parent.height;
+            text: root.item.subpath != "" ? root.item.name + "  ·  " + root.item.subpath : root.item.name;
+            color: root.item.broken-symlink ? Theme.danger : root.item.is-hidden ? Theme.text-secondary : Theme.text-primary;
+            font-size: Theme.font-size-md;
+            vertical-alignment: center;
+            overflow: elide;
+        }
         Text { x: root.size-left; y: 0px; height: parent.height; text: root.item.size; color: Theme.text-secondary; font-size: Theme.font-size-sm; width: root.size-column; horizontal-alignment: right; vertical-alignment: center; }
         Text { x: root.modified-left; y: 0px; height: parent.height; text: root.item.modified; color: Theme.text-secondary; font-size: Theme.font-size-sm; width: root.modified-column; vertical-alignment: center; }
         if root.show-type: Text { x: root.type-left; y: 0px; height: parent.height; text: root.item.detail; color: Theme.text-muted; font-size: Theme.font-size-sm; width: root.type-column; vertical-alignment: center; overflow: elide; }
     }
     if root.grid: Rectangle {
         private property <length> name-height: Theme.font-size-md * 2.8;
-        private property <length> group-height: Theme.icon-size-lg * 2 + Theme.spacing-xs + self.name-height;
+        private property <length> group-height: root.grid-icon-size + Theme.spacing-xs + self.name-height;
         private property <length> group-top: Math.max(Theme.spacing-lg, (root.height - self.group-height) / 2);
-        Image { x: (parent.width - self.width) / 2; y: parent.group-top; width: Theme.icon-size-lg * 2; height: self.width; source: root.item.icon; image-fit: contain; }
-        Text { x: Theme.spacing-lg; y: parent.group-top + Theme.icon-size-lg * 2 + Theme.spacing-xs; width: parent.width - self.x * 2; height: parent.name-height; text: root.item.name; color: root.item.is-hidden ? Theme.text-secondary : Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: top; overflow: elide; wrap: word-wrap; }
+        Image { x: (parent.width - self.width) / 2; y: parent.group-top; width: root.grid-icon-size; height: self.width; source: root.item.icon; image-fit: contain; }
+        if root.item.is-symlink: Rectangle {
+            x: (parent.width + root.grid-icon-size) / 2 - self.width + 2px;
+            y: parent.group-top + root.grid-icon-size - self.height + 2px;
+            width: 18px; height: 18px; border-radius: 9px;
+            background: root.item.broken-symlink ? Theme.danger : Theme.surface;
+            border-width: 1px;
+            border-color: root.item.broken-symlink ? Theme.danger : Theme.border;
+            Image {
+                x: 3px; y: 3px; width: 12px; height: 12px;
+                source: @image-url("../assets/symlink.svg");
+                colorize: root.item.broken-symlink ? #ffffff : Theme.text-primary;
+                image-fit: contain;
+            }
+        }
+        Text { x: Theme.spacing-lg; y: parent.group-top + root.grid-icon-size + Theme.spacing-xs; width: parent.width - self.x * 2; height: parent.name-height; text: root.item.name; color: root.item.broken-symlink ? Theme.danger : root.item.is-hidden ? Theme.text-secondary : Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: top; overflow: elide; wrap: word-wrap; }
     }
     touch := TouchArea {
         enabled: root.item.name != "";
@@ -50,6 +89,6 @@ export component FileCell inherits Rectangle {
             }
         }
         clicked => { root.selected(root.ctrl, root.shift); }
-        double-clicked => { root.activated(); }
+        double-clicked => { if !root.ctrl && !root.shift { root.activated(); } }
     }
 }

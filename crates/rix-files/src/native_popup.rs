@@ -54,7 +54,7 @@ fn polling_interval(
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct OwnedMenuItem {
     pub action: String,
     pub label: String,
@@ -63,6 +63,8 @@ pub struct OwnedMenuItem {
     pub separator: bool,
     pub destructive: bool,
     pub checked: bool,
+    pub checkable: bool,
+    pub radio: bool,
 }
 impl From<MenuItem> for OwnedMenuItem {
     fn from(item: MenuItem) -> Self {
@@ -74,6 +76,8 @@ impl From<MenuItem> for OwnedMenuItem {
             separator: item.separator,
             destructive: item.destructive,
             checked: item.checked,
+            checkable: item.checkable,
+            radio: item.radio,
         }
     }
 }
@@ -87,6 +91,8 @@ impl From<OwnedMenuItem> for MenuItem {
             separator: item.separator,
             destructive: item.destructive,
             checked: item.checked,
+            checkable: item.checkable,
+            radio: item.radio,
         }
     }
 }
@@ -1633,6 +1639,7 @@ mod tests {
                 separator: false,
                 destructive: false,
                 checked: true,
+                ..Default::default()
             },
             OwnedMenuItem {
                 action: String::new(),
@@ -1642,6 +1649,7 @@ mod tests {
                 separator: true,
                 destructive: false,
                 checked: true,
+                ..Default::default()
             },
             OwnedMenuItem {
                 action: "2".into(),
@@ -1651,6 +1659,7 @@ mod tests {
                 separator: false,
                 destructive: false,
                 checked: true,
+                ..Default::default()
             },
         ];
         assert_eq!(initial_selection(&rows, 34., 9.), Some((2, 43.)));
@@ -1692,6 +1701,7 @@ mod tests {
                     separator: false,
                     destructive: false,
                     checked: index == selected,
+                    ..Default::default()
                 })
                 .collect()
         };
@@ -1784,6 +1794,7 @@ mod tests {
             separator,
             destructive: false,
             checked: false,
+            ..Default::default()
         };
         commands
             .send(Command::Show(
@@ -1885,6 +1896,7 @@ mod tests {
                             separator: false,
                             destructive: false,
                             checked: false,
+                            ..Default::default()
                         }],
                         title: "Folder actions".into(),
                         x: 0,

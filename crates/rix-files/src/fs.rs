@@ -13,6 +13,7 @@ pub struct Entry {
     pub name: String,
     pub is_dir: bool,
     pub is_symlink: bool,
+    pub broken_symlink: bool,
     pub size: u64,
     pub modified: Option<SystemTime>,
     pub kind: String,
@@ -32,14 +33,28 @@ pub enum SortBy {
 fn entry(path: PathBuf, icons: &crate::opening::MimeDetector) -> io::Result<Entry> {
     let metadata = fs::symlink_metadata(&path)?;
     let is_symlink = metadata.is_symlink();
-    let is_dir = metadata.is_dir() || (is_symlink && path.is_dir());
+    let target_meta = if is_symlink { fs::metadata(&path).ok() } else { None };
+    let broken_symlink = is_symlink && target_meta.is_none();
+    let is_dir = metadata.is_dir() || target_meta.as_ref().is_some_and(|m| m.is_dir());
     let extension = path
         .extension()
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_lowercase();
     let (kind, icon_names) = if is_dir {
-        ("Folder".into(), vec!["folder".into()])
+        (
+            if is_symlink {
+                "Folder link".into()
+            } else {
+                "Folder".into()
+            },
+            vec!["folder".into()],
+        )
+    } else if broken_symlink {
+        (
+            "Broken link".into(),
+            vec!["emblem-symbolic-link".into(), "text-x-generic".into()],
+        )
     } else if is_symlink {
         (
             "Symbolic link".into(),
@@ -74,6 +89,7 @@ fn entry(path: PathBuf, icons: &crate::opening::MimeDetector) -> io::Result<Entr
         path,
         is_dir,
         is_symlink,
+        broken_symlink,
         size: metadata.len(),
         modified: metadata.modified().ok(),
         kind,
@@ -159,12 +175,28 @@ pub fn search_directory_with_status(
     show_hidden: bool,
     cancel: &AtomicBool,
 ) -> io::Result<SearchOutcome> {
-    search_with_deadline(path, query, show_hidden, cancel, SEARCH_DEADLINE)
+    search_directory_sorted(path, query, show_hidden, SortBy::Name, false, true, cancel)
 }
+
+pub fn search_directory_sorted(
+    path: &Path,
+    query: &str,
+    show_hidden: bool,
+    sort: SortBy,
+    descending: bool,
+    recursive: bool,
+    cancel: &AtomicBool,
+) -> io::Result<SearchOutcome> {
+    search_with_deadline(path, query, show_hidden, sort, descending, recursive, cancel, SEARCH_DEADLINE)
+}
+
 fn search_with_deadline(
     path: &Path,
     query: &str,
     show_hidden: bool,
+    sort: SortBy,
+    descending: bool,
+    recursive: bool,
     cancel: &AtomicBool,
     deadline: Duration,
 ) -> io::Result<SearchOutcome> {
@@ -178,7 +210,7 @@ fn search_with_deadline(
     let started = Instant::now();
     let expired = |started: Instant| started.elapsed() >= deadline;
     let finish = |results: &mut Vec<Entry>, stop: SearchStop| {
-        sort_entries(results, SortBy::Name, false);
+        sort_entries(results, sort, descending);
         SearchOutcome {
             entries: std::mem::take(results),
             stop,
@@ -209,7 +241,7 @@ fn search_with_deadline(
             let Ok(item) = entry(path, &icons) else {
                 continue;
             };
-            if item.is_dir && !item.is_symlink && depth < 64 {
+            if recursive && item.is_dir && !item.is_symlink && depth < 64 {
                 pending.push((item.path.clone(), depth + 1, None));
             }
             if item.name.to_lowercase().contains(&query) {
@@ -313,8 +345,17 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         fs::write(root.path().join("match.txt"), "content").unwrap();
         let cancel = AtomicBool::new(false);
-        let outcome =
-            search_with_deadline(root.path(), "match", false, &cancel, Duration::ZERO).unwrap();
+        let outcome = search_with_deadline(
+            root.path(),
+            "match",
+            false,
+            SortBy::Name,
+            false,
+            true,
+            &cancel,
+            Duration::ZERO,
+        )
+        .unwrap();
         assert_eq!(outcome.stop, SearchStop::Deadline);
         assert!(outcome.entries.is_empty());
         let outcome = search_directory_with_status(root.path(), "match", false, &cancel).unwrap();
