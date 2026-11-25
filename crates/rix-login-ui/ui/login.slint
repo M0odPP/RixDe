@@ -31,8 +31,10 @@ component QuietButton inherits Rectangle {
 export component LoginWindow inherits Window {
     title: "Rix";
     background: #10121c;
-    preferred-width: 1280px;
-    preferred-height: 800px;
+    in property <length> initial-width: 1280px;
+    in property <length> initial-height: 800px;
+    preferred-width: root.initial-width;
+    preferred-height: root.initial-height;
     default-font-family: "Noto Sans";
     in-out property <string> username;
     in property <string> display-name;

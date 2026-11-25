@@ -350,6 +350,10 @@ fn main() -> anyhow::Result<()> {
 
 fn preview() -> anyhow::Result<()> {
     let window = LoginWindow::new()?;
+    window.window().set_size(slint::LogicalSize::new(
+        window.get_initial_width(),
+        window.get_initial_height(),
+    ));
     let _clock = rix_login_ui::initialize(&window, true);
     if let Ok(user) = rix_auth::current_user() {
         window.set_username(user.username.into());

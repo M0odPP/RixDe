@@ -541,6 +541,12 @@ fn run_selector(
         Some(controller)
     };
     let ui = CaptureWindow::new()?;
+    if args.preview {
+        ui.window().set_size(slint::LogicalSize::new(
+            ui.get_initial_width(),
+            ui.get_initial_height(),
+        ));
+    }
     initialise(&ui, theme);
     ui.set_frozen(slint_image(&frozen));
     ui.set_phase(1);
@@ -674,6 +680,10 @@ fn run_editor(args: Args, theme: &rix_config::ThemeSettings) -> Result<()> {
     backend.select()?;
     slint::set_xdg_app_id("rix-capture")?;
     let ui = CaptureWindow::new()?;
+    ui.window().set_size(slint::LogicalSize::new(
+        ui.get_initial_width(),
+        ui.get_initial_height(),
+    ));
     initialise(&ui, theme);
     ui.set_phase(2);
     ui.set_native_size(false);

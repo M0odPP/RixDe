@@ -126,6 +126,10 @@ fn main() -> anyhow::Result<()> {
         });
     }
     if args.preview {
+        window.window().set_size(slint::LogicalSize::new(
+            window.get_initial_width(),
+            window.get_initial_height(),
+        ));
         window.set_username("rix".into());
         window.set_display_name("Rix".into());
         rix_login_ui::set_choices(&window, vec!["Rix".into()], vec!["RixDE · Wayland".into()]);

@@ -402,6 +402,10 @@ fn worker(receiver: mpsc::Receiver<Command>, weak: slint::Weak<VaultWindow>) {
 pub fn run_manager() -> Result<()> {
     select_backend()?;
     let ui = VaultWindow::new()?;
+    ui.window().set_size(slint::LogicalSize::new(
+        ui.get_initial_width(),
+        ui.get_initial_height(),
+    ));
     apply_manager_theme(&ui, &load_theme());
     let weak = ui.as_weak();
     theme_stream(move |theme| {

@@ -281,6 +281,12 @@ impl Broker {
             ui.set_heading(heading.into());
             ui.set_description(if confirm { "This password protects the vault. Save it: secrets cannot be recovered without it." } else { "The application needs access to your secret vault." }.into());
             ui.set_confirm_required(confirm); ui.set_incorrect(incorrect);
+            if !ui.window().is_visible() {
+                ui.window().set_size(slint::LogicalSize::new(
+                    ui.get_initial_width(),
+                    ui.get_initial_height(),
+                ));
+            }
             let _ = ui.show(); ui.invoke_focus_password();
         }).map_err(|_| fdo::Error::Failed("Prompt UI is unavailable".into()))?;
         let response = tokio::time::timeout(Duration::from_secs(300), receive)
@@ -490,6 +496,10 @@ fn watch_owner(
 pub fn run_service() -> Result<()> {
     super::ui::select_backend()?;
     let ui = PasswordWindow::new()?;
+    ui.window().set_size(slint::LogicalSize::new(
+        ui.get_initial_width(),
+        ui.get_initial_height(),
+    ));
     apply_prompt_theme(&ui, &super::ui::load_theme());
     super::ui::watch_prompt_theme(ui.as_weak());
     let broker = Broker::new(&ui);

@@ -27,7 +27,9 @@ export component CaptureWindow inherits Window {
     background: Theme.window-background;
     default-font-family: Theme.font-family;
     default-font-size: Theme.font-size-md;
-    preferred-width: 1080px; preferred-height: 740px;
+    in property <length> initial-width: 1080px;
+    in property <length> initial-height: 740px;
+    preferred-width: root.initial-width; preferred-height: root.initial-height;
     min-width: root.phase == 2 ? 760px : 0px; min-height: root.phase == 2 ? 480px : 0px;
     no-frame: root.phase != 2;
     in property <image> frozen;

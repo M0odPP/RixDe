@@ -39,7 +39,8 @@ export component VaultWindow inherits Window {
     title: "Clavis";
     background: transparent;
     default-font-family: Theme.font-family; default-font-size: Theme.font-size-md;
-    preferred-width: 1020px; preferred-height: 700px; min-width: 820px; min-height: 520px;
+    in property <length> initial-width: 1020px; in property <length> initial-height: 700px;
+    preferred-width: root.initial-width; preferred-height: root.initial-height; min-width: 820px; min-height: 520px;
     in property <[VaultRow]> vaults;
     in property <[CredentialRow]> credentials;
     in-out property <int> selected-vault: -1;
@@ -200,7 +201,8 @@ export component VaultWindow inherits Window {
 export component PasswordWindow inherits Window {
     title: "Clavis"; background: transparent;
     default-font-family: Theme.font-family; default-font-size: Theme.font-size-md;
-    preferred-width: 500px; preferred-height: 420px; min-width: 440px; min-height: 380px;
+    in property <length> initial-width: 500px; in property <length> initial-height: 420px;
+    preferred-width: root.initial-width; preferred-height: root.initial-height; min-width: 440px; min-height: 380px;
     in property <string> heading;
     in property <string> description;
     in property <bool> confirm-required;
