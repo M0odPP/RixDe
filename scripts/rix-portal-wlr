@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${RIX_SESSION_BUS_ISOLATED:-}" != 1 && "${RIX_NATIVE_SESSION:-}" != 1 ]]; then
+    echo 'ScreenCast requires a separate Rix session bus. Use rix-session --isolated for a nested session.' >&2
+    exit 1
+fi
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+trusted_binary() {
+    local target=$1 metadata owner mode parent current_uid
+    [[ -f "$target" && -x "$target" ]] || return 1
+    target="$(readlink -f -- "$target")" || return 1
+    metadata="$(stat -Lc '%u %a' -- "$target" 2>/dev/null)" || return 1
+    owner="${metadata%% *}"
+    mode="${metadata##* }"
+    current_uid="$(id -u)"
+    [[ "$owner" == 0 || "$owner" == "$current_uid" ]] || return 1
+    (( (8#$mode & 0022) == 0 )) || return 1
+    parent="$(dirname -- "$target")"
+    while :; do
+        metadata="$(stat -Lc '%u %a' -- "$parent" 2>/dev/null)" || return 1
+        owner="${metadata%% *}"
+        mode="${metadata##* }"
+        [[ "$owner" == 0 || "$owner" == "$current_uid" ]] || return 1
+        (( (8#$mode & 0022) == 0 )) || return 1
+        [[ "$parent" == "/" ]] && break
+        parent="$(dirname -- "$parent")"
+    done
+    return 0
+}
+backend=''
+for candidate in "$script_dir/xdg-desktop-portal-wlr" \
+                 /usr/libexec/rixde/xdg-desktop-portal-wlr \
+                 /usr/libexec/xdg-desktop-portal-wlr \
+                 /usr/lib/xdg-desktop-portal-wlr \
+                 /usr/lib64/xdg-desktop-portal-wlr; do
+    if trusted_binary "$candidate"; then
+        backend="$candidate"
+        break
+    fi
+done
+if [[ -z "$backend" ]]; then
+    echo 'Install xdg-desktop-portal-wlr to enable ScreenCast.' >&2
+    exit 1
+fi
+runtime="$(mktemp -d "${XDG_RUNTIME_DIR:?}/rix-portal.XXXXXX")"
+trap 'rm -rf -- "$runtime"' EXIT
+consent_cmd="$script_dir/rix-remote-control-consent"
+if ! trusted_binary "$consent_cmd"; then
+    consent_cmd=/bin/false
+fi
+chooser_cmd="$script_dir/rix-screen-picker"
+if ! trusted_binary "$chooser_cmd"; then
+    chooser_cmd=/bin/false
+fi
+fps="${RIX_SCREENCAST_FPS:-30}"
+if [[ ! "$fps" =~ ^[0-9]+$ ]] || (( fps < 1 || fps > 60 )); then
+    echo 'Invalid capture frame rate' >&2; exit 1
+fi
+cat > "$runtime/config" <<CONFIG
+[screencast]
+max_fps=$fps
+chooser_type=dmenu
+chooser_cmd=$chooser_cmd
+remote_control_cmd=$consent_cmd
+force_mod_linear=1
+CONFIG
+dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP KDE_SESSION_VERSION XDG_SESSION_DESKTOP XDG_SESSION_TYPE XDG_DATA_DIRS PATH 2>/dev/null || dbus-update-activation-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP KDE_SESSION_VERSION XDG_SESSION_DESKTOP XDG_SESSION_TYPE XDG_DATA_DIRS PATH || true
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP KDE_SESSION_VERSION XDG_SESSION_DESKTOP XDG_SESSION_TYPE XDG_DATA_DIRS PATH 2>/dev/null || true
+fi
+"$backend" -c "$runtime/config" -l INFO &
+backend_pid=$!
+trap 'kill -TERM "$backend_pid" 2>/dev/null || true; wait "$backend_pid" 2>/dev/null || true; rm -rf -- "$runtime"' EXIT
+wait "$backend_pid"

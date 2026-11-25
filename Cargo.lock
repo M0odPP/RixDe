@@ -5480,6 +5480,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "rix-screen-picker"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "image",
+ "rix-assets",
+ "rix-config",
+ "rix-core",
+ "rix-ipc",
+ "serde_json",
+ "slint",
+ "slint-build",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "rix-services"
 version = "0.1.0-alpha.1"
 dependencies = [

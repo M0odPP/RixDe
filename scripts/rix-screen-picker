@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+root_dir="$(cd -- "$script_dir/.." && pwd -P)"
+if [[ -x "$root_dir/target/release/rix-screen-picker" ]]; then
+    exec "$root_dir/target/release/rix-screen-picker" "$@"
+elif [[ -x "$root_dir/target/debug/rix-screen-picker" ]]; then
+    exec "$root_dir/target/debug/rix-screen-picker" "$@"
+elif [[ -x "/usr/libexec/rixde/rix-screen-picker" ]]; then
+    exec /usr/libexec/rixde/rix-screen-picker "$@"
+else
+    cargo run --quiet -p rix-screen-picker -- "$@"
+fi

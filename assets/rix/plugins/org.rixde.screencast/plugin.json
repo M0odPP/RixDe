@@ -3,8 +3,8 @@
   "id": "org.rixde.screencast",
   "name": "Screen Cast",
   "description": "Screen and window casting via Wayland and PipeWire. Remote mouse and keyboard control is granted per session.",
-  "exec": ["rix-portal"],
-  "requires": ["rix-portal", "zenity"],
+  "exec": ["rix-portal-wlr"],
+  "requires": ["rix-portal-wlr", "zenity"],
   "capabilities": ["screen-capture", "remote-input"],
   "session_bus": true
 }

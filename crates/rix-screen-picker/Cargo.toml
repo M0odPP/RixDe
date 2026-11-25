@@ -1,0 +1,22 @@
+[package]
+name = "rix-screen-picker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+rix-config.workspace = true
+rix-core.workspace = true
+rix-assets.workspace = true
+rix-ipc.workspace = true
+slint = { workspace = true, features = ["renderer-software"] }
+image.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true

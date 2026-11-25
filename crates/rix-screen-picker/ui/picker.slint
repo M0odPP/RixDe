@@ -1,0 +1,385 @@
+import { Theme } from "../../../ui/common/theme.slint";
+import { SkinRenderer, SkinFrame, ThemeFrame } from "../../../ui/common/frame.slint";
+import { ScrollView, Palette } from "std-widgets.slint";
+
+export { Theme } from "../../../ui/common/theme.slint";
+export { SkinFrame, SkinRenderer } from "../../../ui/common/frame.slint";
+export { Palette } from "std-widgets.slint";
+
+export struct PickerItemData {
+    raw_target: string,
+    title: string,
+    app_id: string,
+    details: string,
+    is_window: bool,
+    icon: image,
+    preview: image,
+    has_preview: bool,
+}
+
+export struct PickerRowData {
+    items: [PickerItemData],
+}
+
+component TabButton inherits Rectangle {
+    in property <string> text;
+    in property <int> count: 0;
+    in property <bool> active: false;
+    callback clicked();
+
+    height: 36px;
+    border-radius: Theme.radius-sm;
+    background: root.active ? Theme.surface-active : (touch.has-hover ? Theme.surface-hover : transparent);
+    border-width: root.active ? 1px : 0px;
+    border-color: Theme.accent;
+    animate background { duration: Theme.hover-duration * 1ms; }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 8px;
+        alignment: center;
+
+        Text {
+            text: root.text;
+            color: root.active ? Theme.text-primary : Theme.text-secondary;
+            font-size: Theme.font-size-md;
+            font-weight: root.active ? 600 : 500;
+            vertical-alignment: center;
+        }
+
+        if root.count > 0: Rectangle {
+            height: 20px;
+            border-radius: 10px;
+            background: root.active ? Theme.accent : Theme.control-surface;
+            border-width: 1px;
+            border-color: root.active ? Theme.accent : Theme.control-border;
+            HorizontalLayout {
+                padding-left: 7px;
+                padding-right: 7px;
+                alignment: center;
+                Text {
+                    text: root.count;
+                    color: root.active ? #ffffff : Theme.text-secondary;
+                    font-size: 11px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component CardItem inherits Rectangle {
+    in property <PickerItemData> item;
+    in property <bool> selected: false;
+    callback clicked();
+    callback double_clicked();
+
+    min-width: 200px;
+    horizontal-stretch: 1;
+    border-radius: Theme.radius-md;
+    border-width: root.selected ? 2px : 1px;
+    border-color: root.selected ? Theme.accent : (touch.has-hover ? Theme.border-highlight : Theme.border);
+    background: root.selected ? Theme.surface-active : (touch.has-hover ? Theme.surface-hover : Theme.surface);
+    animate border-color { duration: Theme.hover-duration * 1ms; }
+    animate background { duration: Theme.hover-duration * 1ms; }
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+
+        Rectangle {
+            height: 120px;
+            border-radius: Theme.radius-sm;
+            background: Theme.control-surface;
+            clip: true;
+
+            if root.item.has_preview: Image {
+                width: 100%;
+                height: 100%;
+                source: root.item.preview;
+                image-fit: contain;
+            }
+
+            if !root.item.has_preview: VerticalLayout {
+                alignment: center;
+                spacing: 6px;
+                if root.item.icon.width > 0: Image {
+                    source: root.item.icon;
+                    width: 48px;
+                    height: 48px;
+                    image-fit: contain;
+                    horizontal-alignment: center;
+                }
+                if root.item.icon.width == 0: Text {
+                    text: root.item.is_window ? "🪟" : "🖥️";
+                    font-size: 36px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+
+            if root.item.icon.width > 0: Image {
+                source: root.item.icon;
+                width: 22px;
+                height: 22px;
+                image-fit: contain;
+                vertical-alignment: center;
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 2px;
+
+                Text {
+                    text: root.item.title;
+                    color: Theme.text-primary;
+                    font-size: 13px;
+                    font-weight: 600;
+                    overflow: elide;
+                }
+
+                if root.item.details != "": Text {
+                    text: root.item.details;
+                    color: Theme.text-secondary;
+                    font-size: 11px;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+        double-clicked => { root.double_clicked(); }
+    }
+}
+
+component PickerButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    height: 34px;
+    min-width: 84px;
+    border-radius: Theme.radius-sm;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    opacity: root.enabled ? 1.0 : 0.45;
+
+    background: !root.enabled
+        ? (root.primary ? Theme.accent.with-alpha(0.35) : Theme.control-surface)
+        : (root.primary
+            ? (touch.pressed ? Theme.accent.darker(15%) : (touch.has-hover ? Theme.accent-hover : Theme.accent))
+            : (touch.pressed ? Theme.surface-active : (touch.has-hover ? Theme.surface-hover : Theme.control-surface)));
+
+    border-width: root.primary ? 0px : 1px;
+    border-color: touch.has-hover ? Theme.accent.with-alpha(0.4) : Theme.control-border;
+
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        alignment: center;
+
+        Text {
+            text: root.text;
+            color: root.primary ? #ffffff : Theme.text-primary;
+            font-size: 13px;
+            font-weight: root.primary ? 600 : 500;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component PickerWindow inherits Window {
+    title: "Share Screen";
+    in property <length> initial-width: 720px;
+    in property <length> initial-height: 520px;
+    preferred-width: root.initial-width;
+    preferred-height: root.initial-height;
+    min-width: 560px;
+    min-height: 400px;
+    background: Theme.window-background;
+
+    in-out property <int> active_tab: 0;
+    in-out property <int> screen_count: 0;
+    in-out property <int> window_count: 0;
+    in-out property <string> selected_target: "";
+    in-out property <[PickerRowData]> screen_rows;
+    in-out property <[PickerRowData]> window_rows;
+
+    callback confirmed(string);
+    callback cancelled();
+
+    forward-focus: key-handler;
+
+    key-handler := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
+            }
+            if event.text == Key.Return && root.selected_target != "" {
+                root.confirmed(root.selected_target);
+                return accept;
+            }
+            reject
+        }
+
+        VerticalLayout {
+            padding: 18px;
+            spacing: 14px;
+
+            HorizontalLayout {
+                spacing: 16px;
+                alignment: space-between;
+
+                VerticalLayout {
+                    spacing: 2px;
+                    alignment: center;
+                    Text {
+                        text: "Share Screen";
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                    }
+                    Text {
+                        text: "Choose what you want to share with the application";
+                        font-size: 12px;
+                        color: Theme.text-secondary;
+                    }
+                }
+
+                Rectangle {
+                    height: 42px;
+                    border-radius: Theme.radius-sm;
+                    background: Theme.surface;
+                    border-width: 1px;
+                    border-color: Theme.border;
+
+                    HorizontalLayout {
+                        padding: 3px;
+                        spacing: 4px;
+
+                        TabButton {
+                            text: "Screens";
+                            count: root.screen_count;
+                            active: root.active_tab == 0;
+                            clicked => {
+                                root.active_tab = 0;
+                            }
+                        }
+
+                        TabButton {
+                            text: "Windows";
+                            count: root.window_count;
+                            active: root.active_tab == 1;
+                            clicked => {
+                                root.active_tab = 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 1px;
+                background: Theme.divider;
+            }
+
+            Rectangle {
+                vertical-stretch: 1;
+                border-radius: Theme.radius-md;
+                background: Theme.background;
+                border-width: 1px;
+                border-color: Theme.border;
+                clip: true;
+
+                ScrollView {
+                    VerticalLayout {
+                        padding: 16px;
+                        spacing: 12px;
+                        alignment: start;
+
+                        if (root.active_tab == 0 && root.screen_count == 0) || (root.active_tab == 1 && root.window_count == 0): VerticalLayout {
+                            alignment: center;
+                            spacing: 8px;
+                            min-height: 240px;
+
+                            Text {
+                                text: root.active_tab == 0 ? "No screens detected" : "No open windows detected";
+                                color: Theme.text-secondary;
+                                font-size: 15px;
+                                font-weight: 500;
+                                horizontal-alignment: center;
+                            }
+                        }
+
+                        for row in (root.active_tab == 0 ? root.screen_rows : root.window_rows): HorizontalLayout {
+                            spacing: 12px;
+                            alignment: start;
+
+                            for item in row.items: CardItem {
+                                item: item;
+                                selected: root.selected_target == item.raw_target;
+                                clicked => {
+                                    root.selected_target = item.raw_target;
+                                }
+                                double_clicked => {
+                                    root.selected_target = item.raw_target;
+                                    root.confirmed(item.raw_target);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 1px;
+                background: Theme.divider;
+            }
+
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: end;
+
+                PickerButton {
+                    text: "Cancel";
+                    primary: false;
+                    clicked => {
+                        root.cancelled();
+                    }
+                }
+
+                PickerButton {
+                    text: "Share";
+                    primary: true;
+                    enabled: root.selected_target != "";
+                    clicked => {
+                        root.confirmed(root.selected_target);
+                    }
+                }
+            }
+        }
+    }
+}

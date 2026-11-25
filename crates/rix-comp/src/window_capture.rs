@@ -49,6 +49,7 @@ const MAX_PENDING_FRAMES: usize = 32;
 pub struct WindowCaptureState {
     pub toplevels: Option<ForeignToplevelListState>,
     handles: HashMap<u64, ForeignToplevelHandle>,
+    metadata: HashMap<u64, (String, String)>,
     sessions: HashMap<u64, Vec<ExtImageCopyCaptureSessionV1>>,
     pending: Vec<PendingFrame>,
     flights: Vec<Flight>,
@@ -128,6 +129,13 @@ impl WindowCaptureState {
     }
 
     pub fn announce(&mut self, id: u64, title: &str, app_id: &str) {
+        if let Some((old_title, old_app_id)) = self.metadata.get(&id) {
+            if old_title == title && old_app_id == app_id {
+                return;
+            }
+        }
+        self.metadata
+            .insert(id, (title.to_string(), app_id.to_string()));
         if let Some(handle) = self.handles.get(&id) {
             handle.send_title(title);
             handle.send_app_id(app_id);
@@ -143,6 +151,7 @@ impl WindowCaptureState {
     }
 
     pub fn close_window(&mut self, id: u64) {
+        self.metadata.remove(&id);
         if let Some(handle) = self.handles.remove(&id) {
             if let Some(toplevels) = self.toplevels.as_mut() {
                 toplevels.remove_toplevel(&handle);
@@ -157,6 +166,7 @@ impl WindowCaptureState {
         if let Some(sessions) = self.sessions.remove(&id) {
             for session in sessions.into_iter().filter(Resource::is_alive) {
                 if let Some(data) = session.data::<CaptureSessionData>() {
+                    data.state.frame_created.store(false, Ordering::Release);
                     if data.state.stopped.swap(true, Ordering::AcqRel) {
                         continue;
                     }
@@ -222,9 +232,11 @@ pub fn render(
             continue;
         }
         if !pending.frame.is_alive() || !pending.buffer.is_alive() {
+            pending.session_state.frame_created.store(false, Ordering::Release);
             continue;
         }
         if pending.session_state.stopped.load(Ordering::Acquire) || !pending.session.is_alive() {
+            pending.session_state.frame_created.store(false, Ordering::Release);
             pending
                 .frame
                 .failed(ext_image_copy_capture_frame_v1::FailureReason::Stopped);
@@ -233,6 +245,7 @@ pub fn render(
         if state.lock.active {
             pending.session_state.stopped.store(true, Ordering::Release);
             pending.session.stopped();
+            pending.session_state.frame_created.store(false, Ordering::Release);
             pending
                 .frame
                 .failed(ext_image_copy_capture_frame_v1::FailureReason::Stopped);
@@ -247,6 +260,7 @@ pub fn render(
         else {
             pending.session_state.stopped.store(true, Ordering::Release);
             pending.session.stopped();
+            pending.session_state.frame_created.store(false, Ordering::Release);
             pending
                 .frame
                 .failed(ext_image_copy_capture_frame_v1::FailureReason::Stopped);
@@ -257,11 +271,13 @@ pub fn render(
                 if !pending.session_state.stopped.swap(true, Ordering::AcqRel) {
                     pending.session.stopped();
                 }
+                pending.session_state.frame_created.store(false, Ordering::Release);
                 pending
                     .frame
                     .failed(ext_image_copy_capture_frame_v1::FailureReason::Stopped);
                 continue;
             }
+            pending.session_state.frame_created.store(false, Ordering::Release);
             pending
                 .frame
                 .failed(ext_image_copy_capture_frame_v1::FailureReason::Unknown);
@@ -275,6 +291,7 @@ pub fn render(
             pending.session.shm_format(wl_shm::Format::Xrgb8888);
             pending.session.buffer_size(dimensions.0, dimensions.1);
             pending.session.done();
+            pending.session_state.frame_created.store(false, Ordering::Release);
             pending
                 .frame
                 .failed(ext_image_copy_capture_frame_v1::FailureReason::BufferConstraints);
@@ -303,6 +320,7 @@ pub fn render(
             }
             Err(error) => {
                 tracing::debug!(%error, window_id = pending.window_id, "Toplevel frame submission failed");
+                pending.session_state.frame_created.store(false, Ordering::Release);
                 pending
                     .frame
                     .failed(ext_image_copy_capture_frame_v1::FailureReason::Unknown);
@@ -316,6 +334,7 @@ fn poll(state: &mut RixState, renderer: &mut GlesRenderer) {
     for flight in flights {
         let pending = &flight.pending;
         if !pending.frame.is_alive() || !pending.buffer.is_alive() {
+            pending.session_state.frame_created.store(false, Ordering::Release);
             continue;
         }
         let window = state
@@ -332,12 +351,14 @@ fn poll(state: &mut RixState, renderer: &mut GlesRenderer) {
             if !pending.session_state.stopped.swap(true, Ordering::AcqRel) {
                 pending.session.stopped();
             }
+            pending.session_state.frame_created.store(false, Ordering::Release);
             pending
                 .frame
                 .failed(ext_image_copy_capture_frame_v1::FailureReason::Stopped);
             continue;
         }
         if capture_geometry(state, window.unwrap()).is_none_or(|(_, size)| size != flight.size) {
+            pending.session_state.frame_created.store(false, Ordering::Release);
             pending
                 .frame
                 .failed(ext_image_copy_capture_frame_v1::FailureReason::BufferConstraints);
@@ -359,15 +380,20 @@ fn poll(state: &mut RixState, renderer: &mut GlesRenderer) {
                     flight.time.as_secs() as u32,
                     flight.time.subsec_nanos(),
                 );
+                pending.session_state.frame_created.store(false, Ordering::Release);
                 pending.frame.ready();
                 pending.buffer.release();
                 state.window_capture.last_frame = Some(std::time::Instant::now());
             }
-            Ok(Some(false)) => pending
-                .frame
-                .failed(ext_image_copy_capture_frame_v1::FailureReason::BufferConstraints),
+            Ok(Some(false)) => {
+                pending.session_state.frame_created.store(false, Ordering::Release);
+                pending
+                    .frame
+                    .failed(ext_image_copy_capture_frame_v1::FailureReason::BufferConstraints);
+            }
             Err(error) => {
                 tracing::warn!(%error, "Asynchronous window download failed");
+                pending.session_state.frame_created.store(false, Ordering::Release);
                 pending
                     .frame
                     .failed(ext_image_copy_capture_frame_v1::FailureReason::Unknown);
@@ -692,6 +718,9 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, FrameData> for RixState {
                 if state.window_capture.pending.len() + state.window_capture.flights.len()
                     >= MAX_PENDING_FRAMES
                 {
+                    data.session_state
+                        .frame_created
+                        .store(false, Ordering::Release);
                     resource.failed(ext_image_copy_capture_frame_v1::FailureReason::Unknown);
                     return;
                 }
@@ -704,7 +733,11 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, FrameData> for RixState {
                     paint_cursor: data.paint_cursor,
                 });
             }
-            ext_image_copy_capture_frame_v1::Request::Destroy => {}
+            ext_image_copy_capture_frame_v1::Request::Destroy => {
+                data.session_state
+                    .frame_created
+                    .store(false, Ordering::Release);
+            }
             _ => {}
         }
     }
@@ -742,14 +775,12 @@ impl Dispatch<ExtForeignToplevelImageCaptureSourceManagerV1, ()> for RixState {
             toplevel_handle,
         } = request
         {
-            let Some(handle) = ForeignToplevelHandle::from_resource(&toplevel_handle) else {
-                return;
-            };
-            if toplevel_handle.client().as_ref() != Some(client) {
-                return;
-            }
-            let Some(window_id) = handle.user_data().get::<u64>().copied() else {
-                return;
+            let window_id = if toplevel_handle.client().as_ref() == Some(client) {
+                ForeignToplevelHandle::from_resource(&toplevel_handle)
+                    .and_then(|handle| handle.user_data().get::<u64>().copied())
+                    .unwrap_or(0)
+            } else {
+                0
             };
             init.init(source, CaptureSourceData { window_id });
         }

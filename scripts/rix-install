@@ -100,7 +100,7 @@ def main():
         return
 
     source = Path(__file__).resolve().parent.parent
-    binaries = ["rix-comp", "rix-shell", "rix-settings", "rix-ctl", "rix-lock", "rix-greeter", "rix-dm", "rix-capture", "rix-files", "rix-run", "rix-portal", "rix-app-compat", "rix-session-cleanup", "rix-rar"]
+    binaries = ["rix-comp", "rix-shell", "rix-settings", "rix-ctl", "rix-lock", "rix-greeter", "rix-dm", "rix-capture", "rix-files", "rix-run", "rix-portal", "rix-app-compat", "rix-session-cleanup", "rix-rar", "rix-screen-picker"]
     files = []
     private = prefix / "libexec/rixde"
     for name in binaries:
@@ -111,7 +111,9 @@ def main():
             raise ValueError("Build first with ./scripts/rix-build-release")
         files.append((binary, private / name, 0o755))
     for src, name in [("rix-session.sh", "rix-session"),
-                      ("rix-theme-resources", "rix-theme-resources")]:
+                      ("rix-theme-resources", "rix-theme-resources"),
+                      ("rix-portal-wlr", "rix-portal-wlr"),
+                      ("rix-remote-control-consent", "rix-remote-control-consent")]:
         script_file = source / "scripts" / src
         if script_file.is_file():
             files.append((script_file, private / name, 0o755))
@@ -127,7 +129,7 @@ def main():
                 if src.name == "org.freedesktop.impl.portal.desktop.rix.files.service" else src.read_bytes(), mode)
                for src, dest, mode in files]
 
-    for name in binaries + ["rix-session"]:
+    for name in binaries + ["rix-session", "rix-portal-wlr"]:
         if name in binaries and name not in {"rix-dm", "rix-run", "rix-portal", "rix-app-compat", "rix-session-cleanup", "rix-rar"}:
             body = f"#!/bin/sh\nexec {shlex.quote(str(private / 'rix-theme-resources'))} --data-dir {shlex.quote(str(prefix / 'share'))} --exec {shlex.quote(str(private / name))} \"$@\"\n"
         else:
@@ -217,6 +219,10 @@ def main():
         atomic_write(target, content, mode)
         installed[str(dest)] = hashlib.sha256(content).hexdigest()
         atomic_write(manifest_path, json.dumps({"files": installed}, indent=2).encode(), 0o644)
+
+    stale_plugin = prefix / "share/rix/plugins/org.rixde.screencast/plugin.remote-desktop.json"
+    if staged(stale_plugin).is_file():
+        staged(stale_plugin).unlink()
 
     if root == Path("/") and os.geteuid() == 0:
         if Path("/usr/bin/systemd-sysusers").is_file():

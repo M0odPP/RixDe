@@ -19,6 +19,7 @@ members = [
     "crates/rix-greeter",
     "crates/rix-lock",
     "crates/rix-capture",
+    "crates/rix-screen-picker",
     "crates/clavis-client",
     "crates/clavis-app",
 ]

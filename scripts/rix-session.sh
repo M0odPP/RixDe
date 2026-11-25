@@ -472,7 +472,8 @@ run_supervised_compositor() {
         RIX_RECOVERY_LOCKED="$recovery_locked" RIX_COMPOSITOR_HEARTBEAT="$heartbeat_file" setsid /bin/sh -c \
             'export RIX_SESSION_GENERATION=$$
              if [ "${RIX_SESSION_BUS_ISOLATED:-}" = 1 ] && command -v dbus-update-activation-environment >/dev/null 2>&1; then
-                 dbus-update-activation-environment RIX_SESSION_GENERATION || true
+                 dbus-update-activation-environment --systemd RIX_SESSION_GENERATION 2>/dev/null || dbus-update-activation-environment RIX_SESSION_GENERATION || true
+                 if command -v systemctl >/dev/null 2>&1; then systemctl --user import-environment RIX_SESSION_GENERATION 2>/dev/null || true; fi
              fi
              exec "$@"' rix-session "$@" </dev/null &
         child_pid=$!
