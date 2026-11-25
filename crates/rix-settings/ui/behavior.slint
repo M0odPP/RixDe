@@ -1,7 +1,5 @@
 import { Slider, ToggleSwitch } from "../../../ui/common/controls.slint";
-import { Theme } from "../../../ui/common/theme.slint";
-import { Button } from "std-widgets.slint";
-import { ComboBox } from "../../../ui/common/combo_box.slint";
+import { SettingsTokens } from "tokens.slint";
 import { SettingsCard, SettingsRow, SettingsDivider, ValueBadge, RixSpinBox } from "card.slint";
 
 export global BehaviorSettings {
@@ -37,23 +35,25 @@ export global BehaviorSettings {
 export component BehaviorView inherits Rectangle {
     background: transparent;
     preferred-height: content.preferred-height;
+    vertical-stretch: 0;
+
     content := VerticalLayout {
+        alignment: start;
         spacing: 16px;
 
         SettingsCard {
             title: @tr("Window management");
-            subtitle: @tr("Decorations and screen edge window snapping");
 
             SettingsRow {
                 title: @tr("Compositor window decorations");
-                subtitle: @tr("Render title bars and borders around client windows");
+                subtitle: @tr("Draw unified title bars and borders around client windows");
                 ToggleSwitch { checked <=> BehaviorSettings.server-side-decorations; }
             }
 
             SettingsDivider {}
 
             SettingsRow {
-                title: @tr("Window snapping");
+                title: @tr("Edge snapping");
                 subtitle: @tr("Maximize or tile windows when dragged to screen edges");
                 ToggleSwitch { checked <=> BehaviorSettings.window-snap-enabled; }
             }
@@ -62,11 +62,14 @@ export component BehaviorView inherits Rectangle {
 
             if BehaviorSettings.window-snap-enabled: SettingsRow {
                 title: @tr("Edge trigger distance");
-                subtitle: @tr("Screen edge detection threshold in pixels");
+                subtitle: @tr("Distance from screen edge before snap preview activates");
                 HorizontalLayout {
-                    spacing: 10px; alignment: center;
+                    spacing: 8px;
+                    alignment: center;
                     Slider {
-                        minimum: 8; maximum: 160; step: 1;
+                        minimum: 8;
+                        maximum: 160;
+                        step: 1;
                         value: BehaviorSettings.window-snap-distance;
                         min-width: 160px;
                         changed(v) => { BehaviorSettings.window-snap-distance = round(v); }
@@ -78,12 +81,15 @@ export component BehaviorView inherits Rectangle {
             if BehaviorSettings.window-snap-enabled: SettingsDivider {}
 
             if BehaviorSettings.window-snap-enabled: SettingsRow {
-                title: @tr("Snap preview opacity");
-                subtitle: @tr("Opacity of the window snap zone outline");
+                title: @tr("Snap zone opacity");
+                subtitle: @tr("Fill opacity of the tiling preview overlay");
                 HorizontalLayout {
-                    spacing: 10px; alignment: center;
+                    spacing: 8px;
+                    alignment: center;
                     Slider {
-                        minimum: 8; maximum: 60; step: 1;
+                        minimum: 8;
+                        maximum: 60;
+                        step: 1;
                         value: BehaviorSettings.window-snap-opacity;
                         min-width: 160px;
                         changed(v) => { BehaviorSettings.window-snap-opacity = round(v); }
@@ -94,12 +100,11 @@ export component BehaviorView inherits Rectangle {
         }
 
         SettingsCard {
-            title: @tr("Taskbar and window previews");
-            subtitle: @tr("Window grouping and task hover thumbnails");
+            title: @tr("Taskbar and previews");
 
             SettingsRow {
                 title: @tr("Group windows by application");
-                subtitle: @tr("Combine multiple windows of the same app into a single taskbar item");
+                subtitle: @tr("Combine windows of the same program into one taskbar item");
                 ToggleSwitch { checked <=> BehaviorSettings.group-tasks; }
             }
 
@@ -107,19 +112,22 @@ export component BehaviorView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Window previews on hover");
-                subtitle: @tr("Show live thumbnail popup when hovering over taskbar items");
+                subtitle: @tr("Show live thumbnail popups when hovering taskbar items");
                 ToggleSwitch { checked <=> BehaviorSettings.previews; }
             }
 
             if BehaviorSettings.previews: SettingsDivider {}
 
             if BehaviorSettings.previews: SettingsRow {
-                title: @tr("Hover popup delay");
-                subtitle: @tr("Delay before showing thumbnail preview in milliseconds");
+                title: @tr("Hover delay");
+                subtitle: @tr("Wait time before opening thumbnail previews");
                 HorizontalLayout {
-                    spacing: 10px; alignment: center;
+                    spacing: 8px;
+                    alignment: center;
                     Slider {
-                        minimum: 100; maximum: 1500; step: 50;
+                        minimum: 100;
+                        maximum: 1500;
+                        step: 50;
                         value: BehaviorSettings.preview-delay;
                         min-width: 160px;
                         changed(v) => { BehaviorSettings.preview-delay = round(v); }
@@ -130,23 +138,26 @@ export component BehaviorView inherits Rectangle {
         }
 
         SettingsCard {
-            title: @tr("Window switching · Alt + Tab");
-            subtitle: @tr("Keyboard application switcher behavior and appearance");
+            title: @tr("Window switcher");
+            key-first: "Alt";
+            key-second: "Tab";
 
             SettingsRow {
                 title: @tr("Include minimized windows");
-                subtitle: @tr("Show minimized applications in the Alt+Tab switcher");
+                subtitle: @tr("List minimized windows inside the switcher");
                 ToggleSwitch { checked <=> BehaviorSettings.switcher-minimized; }
             }
 
             SettingsDivider {}
 
             SettingsRow {
-                title: @tr("Switcher card width");
-                subtitle: @tr("Preview thumbnail card width in pixels");
+                title: @tr("Preview card width");
                 RixSpinBox {
                     value <=> BehaviorSettings.switcher-width;
-                    minimum: 160; maximum: 400; step: 20; suffix: " px";
+                    minimum: 160;
+                    maximum: 400;
+                    step: 20;
+                    suffix: " px";
                 }
             }
 
@@ -154,21 +165,24 @@ export component BehaviorView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Visible window cards");
-                subtitle: @tr("Maximum number of window thumbnails shown at once");
+                subtitle: @tr("Maximum thumbnails displayed at once");
                 RixSpinBox {
                     value <=> BehaviorSettings.switcher-count;
-                    minimum: 1; maximum: 7; step: 1;
+                    minimum: 1;
+                    maximum: 7;
+                    step: 1;
                 }
             }
         }
 
         SettingsCard {
             title: @tr("Clipboard history");
-            subtitle: @tr("Remember copied text and images across applications");
+            key-first: "Win";
+            key-second: "V";
 
             SettingsRow {
                 title: @tr("Enable clipboard history");
-                subtitle: @tr("Record copied items accessible via Win + V");
+                subtitle: @tr("Keep copied text and images available from the history popup");
                 ToggleSwitch { checked <=> BehaviorSettings.clipboard-enabled; }
             }
 
@@ -176,7 +190,7 @@ export component BehaviorView inherits Rectangle {
 
             if BehaviorSettings.clipboard-enabled: SettingsRow {
                 title: @tr("Keep history after restart");
-                subtitle: @tr("Persist clipboard items across system reboots");
+                subtitle: @tr("Persist clipboard entries across reboots");
                 ToggleSwitch { checked <=> BehaviorSettings.clipboard-persist; }
             }
 
@@ -184,33 +198,37 @@ export component BehaviorView inherits Rectangle {
 
             if BehaviorSettings.clipboard-enabled: SettingsRow {
                 title: @tr("Save copied images");
-                subtitle: @tr("Store images and screenshots in clipboard history");
+                subtitle: @tr("Store screenshots and images in clipboard history");
                 ToggleSwitch { checked <=> BehaviorSettings.clipboard-images; }
             }
 
             if BehaviorSettings.clipboard-enabled: SettingsDivider {}
 
             if BehaviorSettings.clipboard-enabled: SettingsRow {
-                title: @tr("History item limit");
-                subtitle: @tr("Maximum number of stored clipboard entries");
+                title: @tr("Entry limit");
+                subtitle: @tr("Maximum items kept in history");
                 RixSpinBox {
                     value <=> BehaviorSettings.clipboard-limit;
-                    minimum: 1; maximum: 200; step: 5;
+                    minimum: 1;
+                    maximum: 200;
+                    step: 5;
                 }
             }
         }
 
         SettingsCard {
-            title: @tr("Animations");
-            subtitle: @tr("Window and menu transition animation duration");
+            title: @tr("Motion");
 
             SettingsRow {
-                title: @tr("Animation duration");
-                subtitle: @tr("Speed of menu openings and window transitions");
+                title: @tr("Transition duration");
+                subtitle: @tr("Duration of window and menu transitions");
                 HorizontalLayout {
-                    spacing: 10px; alignment: center;
+                    spacing: 8px;
+                    alignment: center;
                     Slider {
-                        minimum: 0; maximum: 500; step: 25;
+                        minimum: 0;
+                        maximum: 500;
+                        step: 25;
                         value: BehaviorSettings.animation-duration;
                         min-width: 160px;
                         changed(v) => {

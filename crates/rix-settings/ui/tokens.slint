@@ -1,0 +1,118 @@
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../../../ui/common/theme.slint";
+
+export global SettingsTokens {
+    out property <bool> is-light: Palette.color-scheme == ColorScheme.light;
+    out property <bool> is-oled: !root.is-light && Theme.window-background == #000000;
+
+    out property <color> bg-sidebar: root.is-light ? #f1f2f4 : (root.is-oled ? #000000 : #0f1012);
+    out property <color> bg-canvas: root.is-light ? #f7f8fa : (root.is-oled ? #050506 : #141517);
+    out property <color> bg-card: root.is-light ? #ffffff : (root.is-oled ? #0d0d0f : #1a1b1e);
+    out property <color> bg-raised: root.is-light ? #eef0f3 : (root.is-oled ? #161619 : #222428);
+    out property <color> bg-hover: root.is-light ? #e4e7ec : (root.is-oled ? #1e1f24 : #2a2c31);
+    out property <color> bg-active: root.is-light ? #e6e9ef : (root.is-oled ? #202127 : #26282e);
+    out property <color> bg-stage: root.is-light ? #eceef2 : (root.is-oled ? #020203 : #0e0f11);
+    out property <color> bg-footer: root.is-light ? #f4f5f7 : (root.is-oled ? #070709 : #111214);
+
+    out property <color> border: root.is-light ? #e3e5ea : (root.is-oled ? #1e1f24 : #2a2c31);
+    out property <color> border-strong: root.is-light ? #cdd1da : (root.is-oled ? #2d2e36 : #383a42);
+    out property <color> divider: root.is-light ? #eceef2 : (root.is-oled ? #18191d : #24262b);
+    out property <color> bg-hover-subtle: root.is-light ? #e9ecf1 : (root.is-oled ? #16171b : #1d1f24);
+
+    out property <color> text-primary: root.is-light ? #16181c : #ededef;
+    out property <color> text-secondary: root.is-light ? #525660 : #a1a1aa;
+    out property <color> text-muted: root.is-light ? #6c717d : #85858f;
+
+    out property <color> primary-bg: root.is-light ? #16181c : #ededef;
+    out property <color> primary-hover: root.is-light ? #2b2f37 : #ffffff;
+    out property <color> primary-pressed: root.is-light ? #0b0c0e : #d4d4d8;
+    out property <color> primary-fg: root.is-light ? #ffffff : #111214;
+
+    out property <color> accent: Theme.accent;
+    out property <color> accent-subtle: root.is-light ? Theme.accent.with-alpha(0.10) : Theme.accent.with-alpha(0.14);
+    out property <color> accent-border: Theme.accent;
+
+    out property <color> positive: root.is-light ? #16a34a : #4cc38a;
+    out property <color> positive-subtle: root.is-light ? #eaf7ee : (root.is-oled ? #0d1f17 : #1a2a23);
+    out property <color> positive-border: root.is-light ? #b8e3c6 : (root.is-oled ? #1d4432 : #274a3a);
+    out property <color> warning: root.is-light ? #b45309 : #e5a93c;
+    out property <color> warning-subtle: root.is-light ? #fdf4e7 : (root.is-oled ? #211a0c : #2d2518);
+    out property <color> warning-border: root.is-light ? #ebd0a7 : (root.is-oled ? #4a3918 : #524020);
+    out property <color> danger: root.is-light ? #dc2626 : #e5484d;
+    out property <color> danger-subtle: root.is-light ? #fdecec : (root.is-oled ? #231113 : #2f1b1e);
+    out property <color> danger-border: root.is-light ? #f0b8b8 : (root.is-oled ? #4d2226 : #57292d);
+
+    out property <string> font-sans: Theme.font-family;
+    out property <string> font-mono: "Noto Sans Mono";
+
+    out property <length> text-xs: 11px;
+    out property <length> text-sm: 12px;
+    out property <length> text-md: 13px;
+    out property <length> text-lg: 15px;
+    out property <length> text-title: 24px;
+
+    out property <length> radius-xs: 4px;
+    out property <length> radius-sm: 6px;
+    out property <length> radius-md: 8px;
+    out property <length> radius-lg: 12px;
+    out property <length> radius-xl: 16px;
+
+    out property <duration> duration-fast: Theme.hover-duration * 1ms;
+}
+
+export global SettingsIcons {
+    out property <image> rix-mark: @image-url("../assets/icons/rix-mark.svg");
+    out property <image> appearance: @image-url("../assets/icons/appearance.svg");
+    out property <image> wallpaper: @image-url("../assets/icons/wallpaper.svg");
+    out property <image> cursor: @image-url("../assets/icons/cursor.svg");
+    out property <image> panel: @image-url("../assets/icons/panel.svg");
+    out property <image> backup: @image-url("../assets/icons/backup.svg");
+    out property <image> window: @image-url("../assets/icons/window.svg");
+    out property <image> display: @image-url("../assets/icons/display.svg");
+    out property <image> audio: @image-url("../assets/icons/audio.svg");
+    out property <image> network: @image-url("../assets/icons/network.svg");
+    out property <image> power: @image-url("../assets/icons/power.svg");
+    out property <image> keyboard: @image-url("../assets/icons/keyboard.svg");
+    out property <image> behavior: @image-url("../assets/icons/behavior.svg");
+    out property <image> autostart: @image-url("../assets/icons/autostart.svg");
+    out property <image> apps: @image-url("../assets/icons/apps.svg");
+    out property <image> extensions: @image-url("../assets/icons/extensions.svg");
+    out property <image> vault: @image-url("../assets/icons/vault.svg");
+    out property <image> language: @image-url("../assets/icons/language.svg");
+    out property <image> info: @image-url("../assets/icons/info.svg");
+
+    out property <image> search: @image-url("../assets/icons/search.svg");
+    out property <image> check: @image-url("../assets/icons/check.svg");
+    out property <image> chevron-down: @image-url("../assets/icons/chevron-down.svg");
+    out property <image> arrow-up: @image-url("../assets/icons/arrow-up.svg");
+    out property <image> arrow-down: @image-url("../assets/icons/arrow-down.svg");
+    out property <image> plus: @image-url("../assets/icons/plus.svg");
+    out property <image> minus: @image-url("../assets/icons/minus.svg");
+    out property <image> trash: @image-url("../assets/icons/trash.svg");
+    out property <image> refresh: @image-url("../assets/icons/refresh.svg");
+    out property <image> folder: @image-url("../assets/icons/folder.svg");
+    out property <image> close: @image-url("../assets/icons/close.svg");
+    out property <image> sliders: @image-url("../assets/icons/sliders.svg");
+
+    public pure function for-tab(tab-id: int) -> image {
+        if tab-id == 0 { return root.appearance; }
+        if tab-id == 1 { return root.cursor; }
+        if tab-id == 2 { return root.display; }
+        if tab-id == 3 { return root.backup; }
+        if tab-id == 4 { return root.panel; }
+        if tab-id == 6 { return root.keyboard; }
+        if tab-id == 7 { return root.audio; }
+        if tab-id == 8 { return root.network; }
+        if tab-id == 9 { return root.autostart; }
+        if tab-id == 10 { return root.behavior; }
+        if tab-id == 11 { return root.wallpaper; }
+        if tab-id == 12 { return root.extensions; }
+        if tab-id == 13 { return root.info; }
+        if tab-id == 14 { return root.language; }
+        if tab-id == 15 { return root.apps; }
+        if tab-id == 16 { return root.power; }
+        if tab-id == 17 { return root.window; }
+        if tab-id == 18 { return root.vault; }
+        return root.appearance;
+    }
+}

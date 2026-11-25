@@ -1,7 +1,6 @@
-import { Theme } from "../../../ui/common/theme.slint";
 import { Slider, ToggleSwitch } from "../../../ui/common/controls.slint";
-import { Button } from "std-widgets.slint";
 import { ComboBox } from "../../../ui/common/combo_box.slint";
+import { SettingsTokens } from "tokens.slint";
 import { SettingsCard, SettingsRow, SettingsDivider, ValueBadge } from "card.slint";
 
 export global PowerPreferences {
@@ -30,32 +29,22 @@ export global PowerPreferences {
     callback apply();
 }
 
-component DelaySliderRow inherits Rectangle {
-    in property <string> title;
-    in property <string> subtitle: "";
+component DelaySliderRow inherits SettingsRow {
     in-out property <int> minutes;
-    min-height: 44px;
-    preferred-height: row-layout.preferred-height;
-
-    row-layout := HorizontalLayout {
-        spacing: 20px;
-        VerticalLayout {
-            horizontal-stretch: 1; alignment: center; spacing: 2px;
-            Text { text: root.title; color: Theme.text-primary; font-size: 13.5px; font-weight: 500; }
-            if root.subtitle != "": Text { text: root.subtitle; color: Theme.text-secondary; font-size: 12px; wrap: word-wrap; }
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: center;
+        Slider {
+            minimum: 0;
+            maximum: 240;
+            step: 5;
+            value: root.minutes;
+            min-width: 160px;
+            changed(v) => { root.minutes = round(v); }
         }
-        VerticalLayout {
-            horizontal-stretch: 0; alignment: center;
-            HorizontalLayout {
-                spacing: 10px; alignment: end;
-                Slider {
-                    minimum: 0; maximum: 240; step: 5; value: root.minutes; min-width: 160px;
-                    changed(v) => { root.minutes = round(v); }
-                }
-                ValueBadge {
-                    text: root.minutes == 0 ? @tr("Never") : root.minutes + " " + @tr("min");
-                }
-            }
+        ValueBadge {
+            readout-width: 64px;
+            text: root.minutes == 0 ? @tr("Never") : root.minutes + " " + @tr("min");
         }
     }
 }
@@ -64,67 +53,76 @@ export component PowerView inherits Rectangle {
     in property <bool> busy;
     background: transparent;
     preferred-height: content.preferred-height;
+    vertical-stretch: 0;
+
     content := VerticalLayout {
+        alignment: start;
         spacing: 16px;
 
         SettingsCard {
-            title: @tr("Active power plan");
-            subtitle: @tr("Choose energy profile and automatic battery optimization");
+            title: @tr("Power plan");
+            badge: PowerPreferences.actual-profile;
 
             SettingsRow {
                 title: @tr("Active profile");
                 subtitle: PowerPreferences.source;
-                ComboBox { model: PowerPreferences.plans; current-index <=> PowerPreferences.selected; min-width: 195px; }
+                ComboBox {
+                    model: PowerPreferences.plans;
+                    current-index <=> PowerPreferences.selected;
+                    min-width: 208px;
+                }
             }
 
             SettingsDivider {}
 
             SettingsRow {
-                title: @tr("Battery power plan");
-                subtitle: @tr("Automatically switch to a power-saving profile when on battery");
+                title: @tr("Automatic battery plan");
+                subtitle: @tr("Switch to a lower-power profile when unplugged");
                 ToggleSwitch { checked <=> PowerPreferences.automatic; }
             }
 
             if PowerPreferences.automatic: SettingsDivider {}
 
             if PowerPreferences.automatic: SettingsRow {
-                title: @tr("On battery profile");
-                subtitle: @tr("Profile activated on unplugging power adapter");
-                ComboBox { model: PowerPreferences.plans; current-index <=> PowerPreferences.battery; min-width: 195px; }
+                title: @tr("On-battery profile");
+                ComboBox {
+                    model: PowerPreferences.plans;
+                    current-index <=> PowerPreferences.battery;
+                    min-width: 208px;
+                }
             }
         }
 
         SettingsCard {
             title: @tr("Display and sleep timeouts");
-            subtitle: @tr("Screen dimming, display power off and system sleep delays");
 
             DelaySliderRow {
-                title: @tr("Dim screen when inactive");
-                subtitle: @tr("Reduce brightness before turning off display");
+                title: @tr("Dim display");
+                subtitle: @tr("Reduce screen brightness while inactive");
                 minutes <=> PowerPreferences.dim-minutes;
             }
 
             SettingsDivider {}
 
             DelaySliderRow {
-                title: @tr("Turn off display after");
-                subtitle: @tr("Power down connected monitors to conserve power");
+                title: @tr("Turn off display");
+                subtitle: @tr("Power down monitors after inactivity");
                 minutes <=> PowerPreferences.off-minutes;
             }
 
             SettingsDivider {}
 
             DelaySliderRow {
-                title: @tr("Lock screen after display off");
-                subtitle: @tr("Require password after screen turns off");
+                title: @tr("Lock screen");
+                subtitle: @tr("Require password after display turns off");
                 minutes <=> PowerPreferences.lock-minutes;
             }
 
             SettingsDivider {}
 
             DelaySliderRow {
-                title: @tr("Put computer to sleep after");
-                subtitle: @tr("Enter low-power suspend or hibernate state");
+                title: @tr("System sleep");
+                subtitle: @tr("Suspend or hibernate after inactivity");
                 minutes <=> PowerPreferences.sleep-minutes;
             }
 
@@ -132,32 +130,37 @@ export component PowerView inherits Rectangle {
 
             if PowerPreferences.sleep-minutes > 0: SettingsRow {
                 title: @tr("Sleep action");
-                subtitle: @tr("Select suspend to RAM or hibernate to disk");
-                ComboBox { model: [@tr("Suspend"), @tr("Hibernate")]; current-index <=> PowerPreferences.sleep-action; min-width: 195px; }
+                ComboBox {
+                    model: [@tr("Suspend"), @tr("Hibernate")];
+                    current-index <=> PowerPreferences.sleep-action;
+                    min-width: 208px;
+                }
             }
         }
 
         SettingsCard {
-            title: @tr("Behavior and laptop lid");
-            subtitle: @tr("Idle inhibit policies and lid closure");
+            title: @tr("Session and laptop lid");
 
             SettingsRow {
                 title: @tr("Respect idle inhibitors");
-                subtitle: @tr("Prevent sleep when media players or downloads request keep-awake");
+                subtitle: @tr("Prevent sleep while media playback or downloads keep the session awake");
                 ToggleSwitch { checked <=> PowerPreferences.inhibitors; }
             }
 
             SettingsDivider {}
 
             SettingsRow {
-                title: @tr("External display lid action");
-                subtitle: @tr("Keep computer running when lid is closed with external monitor");
+                title: @tr("Keep running with external monitor");
+                subtitle: @tr("Stay awake when closing the laptop lid while an external display is connected");
                 ToggleSwitch { checked <=> PowerPreferences.external-lid; }
             }
         }
 
         if PowerPreferences.error != "": Text {
-            text: PowerPreferences.error; color: Theme.accent; wrap: word-wrap;
+            text: PowerPreferences.error;
+            color: SettingsTokens.danger;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
     }
 }

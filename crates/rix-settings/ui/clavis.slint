@@ -1,6 +1,5 @@
-import { Theme } from "../../../ui/common/theme.slint";
-import { Button } from "std-widgets.slint";
-import { SettingsCard, SettingsRow, SettingsDivider } from "card.slint";
+import { SettingsTokens, SettingsIcons } from "tokens.slint";
+import { SettingsCard, SettingsRow, SettingsDivider, TagBadge, RixButton } from "card.slint";
 
 export struct ClavisProviderChoice { id: string, name: string, detail: string, available: bool }
 
@@ -16,18 +15,23 @@ export global ClavisSettings {
 }
 
 export component ClavisView inherits Rectangle {
+    private property <image> empty-icon;
     background: transparent;
     preferred-height: content.preferred-height;
+    vertical-stretch: 0;
+
     content := VerticalLayout {
+        alignment: start;
         spacing: 16px;
 
         SettingsCard {
-            title: @tr("Clavis Password and Secret Vault");
-            subtitle: @tr("Manage encrypted application passwords, tokens and credentials");
+            title: @tr("Clavis vault");
+            subtitle: @tr("Encrypted passwords, tokens and Secret Service credentials");
 
             HorizontalLayout {
-                Button {
-                    text: @tr("Open Clavis application");
+                RixButton {
+                    text: @tr("Open Clavis");
+                    icon: SettingsIcons.vault;
                     primary: true;
                     clicked => { ClavisSettings.open(); }
                 }
@@ -37,32 +41,43 @@ export component ClavisView inherits Rectangle {
             SettingsDivider {}
 
             SettingsRow {
-                title: @tr("Current session provider");
-                subtitle: @tr("Active Secret Service implementation in this session");
-                Text { text: ClavisSettings.provider; color: Theme.accent; font-weight: 600; font-size: 13px; }
+                title: @tr("Active session provider");
+                subtitle: @tr("Secret Service backend running in this session");
+                TagBadge {
+                    text: ClavisSettings.provider;
+                    success: true;
+                }
             }
 
             SettingsDivider {}
 
             SettingsRow {
                 title: @tr("Next login provider");
-                subtitle: @tr("Provider selected to activate upon next sign-in");
-                Text { text: ClavisSettings.next-provider; color: Theme.text-primary; font-size: 13px; }
+                subtitle: @tr("Backend scheduled for your next desktop session");
+                Text {
+                    text: ClavisSettings.next-provider;
+                    font-family: SettingsTokens.font-mono;
+                    color: SettingsTokens.text-primary;
+                    font-size: SettingsTokens.text-sm;
+                    vertical-alignment: center;
+                }
             }
         }
 
         SettingsCard {
-            title: @tr("Available secret providers");
-            subtitle: @tr("Select backend used to store encrypted credentials and browser keys");
+            title: @tr("Secret providers");
+            subtitle: @tr("Choose which keyring stores encrypted credentials and browser keys");
 
             for choice[index] in ClavisSettings.choices: VerticalLayout {
                 spacing: 0px;
+                vertical-stretch: 0;
                 if index > 0: SettingsDivider {}
                 SettingsRow {
                     title: choice.name;
                     subtitle: choice.detail;
-                    Button {
+                    RixButton {
                         text: ClavisSettings.selected == choice.id ? @tr("Selected") : @tr("Choose");
+                        icon: ClavisSettings.selected == choice.id ? SettingsIcons.check : root.empty-icon;
                         primary: ClavisSettings.selected == choice.id;
                         enabled: choice.available && !ClavisSettings.busy;
                         clicked => { ClavisSettings.choose(choice.id); }
@@ -72,12 +87,17 @@ export component ClavisView inherits Rectangle {
         }
 
         if ClavisSettings.status != "": Text {
-            text: ClavisSettings.status; color: Theme.text-secondary; wrap: word-wrap;
+            text: ClavisSettings.status;
+            color: SettingsTokens.text-secondary;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
 
         Text {
-            text: @tr("Clavis integrates with applications that use Secret Service and the Secret portal. Existing browser encryption keys remain in their current provider until explicitly migrated.");
-            color: Theme.text-muted; font-size: 12px; wrap: word-wrap;
+            text: @tr("Clavis integrates with Secret Service and the Secret portal. Existing browser encryption keys stay in their current provider until migrated.");
+            color: SettingsTokens.text-muted;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
     }
 }

@@ -1,7 +1,6 @@
 import { Slider, ToggleSwitch } from "../../../ui/common/controls.slint";
-import { Theme } from "../../../ui/common/theme.slint";
-import { Button } from "std-widgets.slint";
-import { SettingsCard, SettingsRow, SettingsDivider, ValueBadge } from "card.slint";
+import { SettingsTokens, SettingsIcons } from "tokens.slint";
+import { SettingsCard, SettingsRow, SettingsDivider, ValueBadge, TagBadge, RixButton } from "card.slint";
 
 export struct PluginChoice { id: string, name: string, description: string, capabilities: string, status: string, enabled: bool, available: bool, has-settings: bool }
 
@@ -19,57 +18,79 @@ export global PluginSettings {
 export component PluginsView inherits Rectangle {
     background: transparent;
     preferred-height: content.preferred-height;
+    vertical-stretch: 0;
+
     content := VerticalLayout {
+        alignment: start;
         spacing: 16px;
 
         SettingsCard {
-            title: @tr("Desktop extensions and screencast");
-            subtitle: @tr("Manage modular desktop extensions and screen sharing capture rate");
-
-            HorizontalLayout {
-                spacing: 10px;
-                Button { text: @tr("Open extensions folder"); clicked => { PluginSettings.open-folder(); } }
-                Button { text: @tr("Refresh extensions"); clicked => { PluginSettings.reload(); } }
-                Rectangle { horizontal-stretch: 1; }
-            }
-
-            SettingsDivider {}
+            title: @tr("Screencast and management");
 
             SettingsRow {
-                title: @tr("Screencast capture rate");
-                subtitle: @tr("Maximum frame rate for desktop sharing and video capture");
+                title: @tr("Capture frame rate");
+                subtitle: @tr("Maximum frame rate for desktop sharing and screen capture");
                 HorizontalLayout {
-                    spacing: 10px; alignment: center;
+                    spacing: 8px;
+                    alignment: center;
                     Slider {
-                        minimum: 1; maximum: 60; step: 5;
+                        minimum: 1;
+                        maximum: 60;
+                        step: 5;
                         value: PluginSettings.capture-fps;
-                        min-width: 140px;
+                        min-width: 160px;
                         changed(value) => { PluginSettings.capture-fps = round(value); }
                     }
                     ValueBadge { text: PluginSettings.capture-fps + " " + @tr("fps"); }
                 }
             }
+
+            SettingsDivider {}
+
+            HorizontalLayout {
+                spacing: 8px;
+                RixButton {
+                    text: @tr("Open extensions folder");
+                    icon: SettingsIcons.folder;
+                    clicked => { PluginSettings.open-folder(); }
+                }
+                RixButton {
+                    text: @tr("Refresh");
+                    icon: SettingsIcons.refresh;
+                    clicked => { PluginSettings.reload(); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
         }
 
         SettingsCard {
             title: @tr("Installed extensions");
-            subtitle: @tr("Extensions run as isolated processes with session capability permissions");
+            subtitle: @tr("Extensions run in isolated processes with declared capabilities");
 
             if PluginSettings.entries.length == 0: Text {
                 text: @tr("No desktop extensions installed");
-                color: Theme.text-secondary; font-size: 13px;
+                color: SettingsTokens.text-muted;
+                font-size: SettingsTokens.text-md;
             }
 
             for plugin[index] in PluginSettings.entries: VerticalLayout {
                 spacing: 0px;
+                vertical-stretch: 0;
                 if index > 0: SettingsDivider {}
                 SettingsRow {
                     title: plugin.name;
-                    subtitle: plugin.description + (plugin.status != "" ? " · " + plugin.status : "");
+                    subtitle: plugin.description + (plugin.capabilities != "" ? " · " + plugin.capabilities : "");
                     HorizontalLayout {
-                        spacing: 10px; alignment: center;
-                        if plugin.has-settings: Button {
-                            text: @tr("Configure…");
+                        spacing: 12px;
+                        alignment: center;
+                        if plugin.status != "": TagBadge {
+                            text: plugin.status;
+                            success: plugin.enabled && plugin.available;
+                            warning: !plugin.available;
+                        }
+                        if plugin.has-settings: RixButton {
+                            text: @tr("Configure");
+                            icon: SettingsIcons.sliders;
                             enabled: plugin.available;
                             clicked => { PluginSettings.settings(plugin.id); }
                         }
@@ -84,12 +105,17 @@ export component PluginsView inherits Rectangle {
         }
 
         if PluginSettings.error != "": Text {
-            text: PluginSettings.error; color: Theme.accent; wrap: word-wrap;
+            text: PluginSettings.error;
+            color: SettingsTokens.danger;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
 
         Text {
-            text: @tr("Only enable extensions from trusted sources: extensions can interact with your active desktop session.");
-            color: Theme.text-muted; font-size: 12px; wrap: word-wrap;
+            text: @tr("Only enable extensions from trusted sources because they can interact with your active desktop session");
+            color: SettingsTokens.text-muted;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
     }
 }

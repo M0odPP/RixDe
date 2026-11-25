@@ -656,11 +656,30 @@ mod tests {
         slint::platform::set_platform(Box::new(Surface(surface.clone()))).unwrap();
         let window = SettingsWindow::new().unwrap();
         crate::skins::install(window.global::<crate::SkinRenderer>(), window.as_weak());
+        window.set_version(env!("CARGO_PKG_VERSION").into());
         window.set_active_tab(17);
+        crate::refresh_navigation(&window, "");
         let output = std::env::var_os("RIX_SETTINGS_RENDER_DIR")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::env::temp_dir().join("rix-settings-window-appearance"));
         std::fs::create_dir_all(&output).unwrap();
+        let save_shot = |path: &std::path::Path, width: u32, height: u32| {
+            slint::platform::update_timers_and_animations();
+            let mut pixels = vec![slint::Rgb8Pixel::default(); (width * height) as usize];
+            surface.request_redraw();
+            surface.draw_if_needed(|renderer| {
+                renderer.render(&mut pixels, width as usize);
+            });
+            let bytes: Vec<_> = pixels
+                .iter()
+                .flat_map(|pixel| [pixel.r, pixel.g, pixel.b])
+                .collect();
+            assert!(
+                bytes.iter().any(|byte| *byte > 100),
+                "Settings must render readable content"
+            );
+            image::save_buffer(path, &bytes, width, height, image::ColorType::Rgb8).unwrap();
+        };
         for (name, theme) in [
             ("dark", ThemeSettings::default()),
             ("light", ThemeSettings::crisp_light()),
@@ -689,28 +708,7 @@ mod tests {
                     if state == "editor-bottom" {
                         ui.set_scroll_position(-400.);
                     }
-                    slint::platform::update_timers_and_animations();
-                    let mut pixels = vec![slint::Rgb8Pixel::default(); (width * height) as usize];
-                    surface.request_redraw();
-                    surface.draw_if_needed(|renderer| {
-                        renderer.render(&mut pixels, width as usize);
-                    });
-                    let bytes: Vec<_> = pixels
-                        .iter()
-                        .flat_map(|pixel| [pixel.r, pixel.g, pixel.b])
-                        .collect();
-                    assert!(
-                        bytes.iter().any(|byte| *byte > 100),
-                        "Settings must render readable content"
-                    );
-                    image::save_buffer(
-                        output.join(format!("{name}-{width}-{state}.png")),
-                        &bytes,
-                        width,
-                        height,
-                        image::ColorType::Rgb8,
-                    )
-                    .unwrap();
+                    save_shot(&output.join(format!("{name}-{width}-{state}.png")), width, height);
                 }
             }
         }

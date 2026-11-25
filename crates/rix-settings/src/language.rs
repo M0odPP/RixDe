@@ -11,12 +11,12 @@ fn refresh_choices(window: &SettingsWindow, selected: &str) {
         LanguageChoice {
             id: "system".into(),
             name: i18n::tr("System language"),
-            detail: i18n::tr("Follow the language and locale from your login session."),
+            detail: i18n::tr("Follow the language and locale from your login session"),
         },
         LanguageChoice {
             id: "en".into(),
             name: i18n::tr("English"),
-            detail: i18n::tr("Use English in RixDE and newly launched applications."),
+            detail: i18n::tr("Use English in RixDE and newly launched applications"),
         },
     ]))));
 }

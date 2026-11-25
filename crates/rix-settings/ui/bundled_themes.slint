@@ -1,33 +1,51 @@
-import { Theme } from "../../../ui/common/theme.slint";
 import { ToggleSwitch } from "../../../ui/common/controls.slint";
-import { Button } from "std-widgets.slint";
+import { SettingsTokens } from "tokens.slint";
+import { SettingsCard, SettingsRow, SettingsDivider, RixButton } from "card.slint";
+
 export struct InstalledTheme { id: string, name: string, description: string }
+
 export global BundledThemes {
     in-out property <[InstalledTheme]> packages;
     in-out property <bool> include-layout: true;
     callback apply(string);
 }
+
 export component BundledThemesView inherits Rectangle {
     in property <bool> busy;
+    background: transparent;
     preferred-height: content.preferred-height;
-    VerticalLayout {
-        content := VerticalLayout {
-            spacing: Theme.spacing-lg;
-            if BundledThemes.packages.length > 0: Text { text: @tr("Installed themes"); color: Theme.text-primary; font-size: Theme.font-size-lg; font-weight: 600; }
-            for package in BundledThemes.packages: Rectangle {
-                min-height: 100px; border-radius: Theme.radius-md;
-                background: Theme.control-surface; border-width: 1px; border-color: Theme.control-border;
-                HorizontalLayout {
-                    padding: Theme.spacing-xl; spacing: Theme.spacing-xl;
-                    VerticalLayout {
-                        spacing: Theme.spacing-xs;
-                        Text { text: package.name; color: Theme.text-primary; font-size: Theme.font-size-lg; font-weight: 600; }
-                        Text { text: package.description; color: Theme.text-secondary; wrap: word-wrap; }
+    vertical-stretch: 0;
+
+    content := VerticalLayout {
+        alignment: start;
+        spacing: 16px;
+
+        if BundledThemes.packages.length > 0: SettingsCard {
+            title: @tr("Installed themes");
+
+            for package[idx] in BundledThemes.packages: VerticalLayout {
+                spacing: 0px;
+                vertical-stretch: 0;
+                if idx > 0: SettingsDivider {}
+                SettingsRow {
+                    title: package.name;
+                    subtitle: package.description;
+                    RixButton {
+                        text: @tr("Apply");
+                        primary: true;
+                        enabled: !root.busy;
+                        clicked => { BundledThemes.apply(package.id); }
                     }
-                    Button { text: @tr("Apply"); height: Theme.menu-action-size; vertical-stretch: 0; primary: true; enabled: !root.busy; clicked => { BundledThemes.apply(package.id); } }
                 }
             }
-            if BundledThemes.packages.length > 0: ToggleSwitch { text: @tr("Apply panel and application menu layout"); checked <=> BundledThemes.include-layout; }
+
+            SettingsDivider {}
+
+            SettingsRow {
+                title: @tr("Include panel and menu layout");
+                subtitle: @tr("Apply the theme package's taskbar geometry along with colors");
+                ToggleSwitch { checked <=> BundledThemes.include-layout; }
+            }
         }
     }
 }

@@ -1,8 +1,7 @@
 import { Slider, ToggleSwitch } from "../../../ui/common/controls.slint";
-import { Theme } from "../../../ui/common/theme.slint";
-import { Button } from "std-widgets.slint";
 import { ComboBox } from "../../../ui/common/combo_box.slint";
-import { SettingsCard, SettingsRow, SettingsDivider, ValueBadge } from "card.slint";
+import { SettingsTokens, SettingsIcons } from "tokens.slint";
+import { SettingsCard, SettingsRow, SettingsDivider, ValueBadge, RixButton } from "card.slint";
 
 export global WallpaperPreferences {
     in-out property <string> path;
@@ -16,52 +15,69 @@ export global WallpaperPreferences {
     in-out property <int> max-fps;
     in-out property <color> fill-color;
     in-out property <bool> choosing;
-    callback choose(); callback clear(); callback apply();
+    callback choose();
+    callback clear();
+    callback apply();
 }
 
 export component WallpaperView inherits Rectangle {
     background: transparent;
     preferred-height: form.preferred-height;
+    vertical-stretch: 0;
+
     form := VerticalLayout {
+        alignment: start;
         spacing: 16px;
 
         SettingsCard {
             title: @tr("Current wallpaper");
-            subtitle: @tr("Choose an image or solid background color for your desktop");
 
             Rectangle {
-                height: 220px;
-                border-radius: Theme.radius-md;
+                height: 240px;
+                border-radius: SettingsTokens.radius-md;
                 background: WallpaperPreferences.fill-color;
                 border-width: 1px;
-                border-color: Theme.border;
+                border-color: SettingsTokens.border-strong;
                 clip: true;
-                Image { source: WallpaperPreferences.preview; image-fit: contain; width: 100%; height: 100%; }
-                Rectangle { background: #000000; opacity: WallpaperPreferences.dim; width: 100%; height: 100%; }
+
+                Image {
+                    source: WallpaperPreferences.preview;
+                    image-fit: contain;
+                    width: 100%;
+                    height: 100%;
+                }
+
+                Rectangle {
+                    background: #000000;
+                    opacity: WallpaperPreferences.dim;
+                    width: 100%;
+                    height: 100%;
+                }
 
                 Rectangle {
                     x: 12px;
                     y: parent.height - self.height - 12px;
                     width: parent.width - 24px;
-                    height: 44px;
-                    border-radius: Theme.radius-sm;
-                    background: Theme.surface.with-alpha(0.88);
+                    height: 48px;
+                    border-radius: SettingsTokens.radius-md;
+                    background: SettingsTokens.bg-card.with-alpha(0.92);
                     border-width: 1px;
-                    border-color: Theme.border;
+                    border-color: SettingsTokens.border-strong;
 
                     HorizontalLayout {
-                        padding-left: 14px;
-                        padding-right: 10px;
+                        padding-left: 16px;
+                        padding-right: 8px;
                         spacing: 12px;
 
                         VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
                             Text {
-                                text: WallpaperPreferences.filename != "" ? WallpaperPreferences.filename : @tr("No wallpaper selected");
-                                color: Theme.text-primary;
-                                font-size: 12.5px;
-                                font-weight: 500;
+                                text: WallpaperPreferences.filename != "" ? WallpaperPreferences.filename : @tr("Solid color");
+                                color: SettingsTokens.text-primary;
+                                font-family: SettingsTokens.font-mono;
+                                font-size: SettingsTokens.text-sm;
+                                font-weight: 400;
                                 overflow: elide;
                             }
                         }
@@ -71,12 +87,14 @@ export component WallpaperView inherits Rectangle {
                             alignment: center;
                             HorizontalLayout {
                                 spacing: 8px;
-                                Button {
-                                    text: WallpaperPreferences.choosing ? @tr("Choosing file…") : @tr("Choose image…");
+                                RixButton {
+                                    text: WallpaperPreferences.choosing ? @tr("Choosing…") : @tr("Choose image");
+                                    icon: SettingsIcons.wallpaper;
+                                    primary: true;
                                     enabled: !WallpaperPreferences.choosing;
                                     clicked => { WallpaperPreferences.choose(); }
                                 }
-                                Button {
+                                RixButton {
                                     text: @tr("Solid color");
                                     clicked => { WallpaperPreferences.clear(); }
                                 }
@@ -89,42 +107,49 @@ export component WallpaperView inherits Rectangle {
             SettingsDivider {}
 
             SettingsRow {
-                title: @tr("Image placement");
-                subtitle: @tr("How the wallpaper image fits on the screen");
+                title: @tr("Placement");
+                subtitle: @tr("How the image scales to the screen");
                 ComboBox {
                     model: [@tr("Fill screen"), @tr("Fit"), @tr("Stretch"), @tr("Center")];
                     current-index <=> WallpaperPreferences.fit;
-                    min-width: 195px;
+                    min-width: 208px;
                 }
             }
 
             SettingsDivider {}
 
             SettingsRow {
-                title: @tr("Background color");
-                subtitle: @tr("Fill color shown behind centered or letterboxed wallpapers");
+                title: @tr("Background fill");
+                subtitle: @tr("Color shown behind centered or solid-color wallpapers");
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: center;
-                    for color in [#161922, #252c38, #384657, #34443d, #443e50, #d8dce4, #000000]: Rectangle {
-                        width: 26px; height: 26px; border-radius: 13px; background: color;
+                    for color in [#14161b, #232832, #323e4c, #2b3a35, #3a3444, #d8dce4, #000000]: Rectangle {
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 12px;
+                        background: color;
                         border-width: WallpaperPreferences.fill-color == color ? 2px : 1px;
-                        border-color: WallpaperPreferences.fill-color == color ? Theme.accent : Theme.border;
-                        TouchArea { clicked => { WallpaperPreferences.fill-color = color; } }
+                        border-color: WallpaperPreferences.fill-color == color ? SettingsTokens.text-primary : SettingsTokens.border-strong;
+                        animate border-color { duration: SettingsTokens.duration-fast; easing: ease-out; }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { WallpaperPreferences.fill-color = color; }
+                        }
                     }
                 }
             }
         }
 
         SettingsCard {
-            title: @tr("Effects and live wallpapers");
-            subtitle: @tr("Visual effects applied to the background image");
+            title: @tr("Effects and playback");
 
             SettingsRow {
-                title: @tr("Wallpaper blur");
-                subtitle: @tr("Blur the background image behind windows");
+                title: @tr("Blur");
+                subtitle: @tr("Soften the desktop background behind windows");
                 HorizontalLayout {
-                    spacing: 10px; alignment: center;
+                    spacing: 8px;
+                    alignment: center;
                     Slider { value <=> WallpaperPreferences.blur; minimum: 0; maximum: 80; min-width: 160px; }
                     ValueBadge { text: round(WallpaperPreferences.blur) + " px"; }
                 }
@@ -134,9 +159,10 @@ export component WallpaperView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Dimming");
-                subtitle: @tr("Darken the wallpaper for improved text contrast");
+                subtitle: @tr("Darken bright backgrounds to improve text contrast");
                 HorizontalLayout {
-                    spacing: 10px; alignment: center;
+                    spacing: 8px;
+                    alignment: center;
                     Slider { value <=> WallpaperPreferences.dim; minimum: 0; maximum: 1; min-width: 160px; }
                     ValueBadge { text: round(WallpaperPreferences.dim * 100) + "%"; }
                 }
@@ -145,27 +171,30 @@ export component WallpaperView inherits Rectangle {
             SettingsDivider {}
 
             SettingsRow {
-                title: @tr("Live animated wallpapers");
-                subtitle: @tr("Play GIF, WebP and video wallpapers on the desktop");
+                title: @tr("Animated wallpapers");
+                subtitle: @tr("Play GIF, WebP and video files on the desktop");
                 ToggleSwitch { checked <=> WallpaperPreferences.animate; }
             }
 
             if WallpaperPreferences.animate: SettingsDivider {}
 
             if WallpaperPreferences.animate: SettingsRow {
-                title: @tr("Animation frame rate");
-                subtitle: @tr("Maximum frames per second for video backgrounds");
+                title: @tr("Frame rate limit");
+                subtitle: @tr("Maximum playback rate for video backgrounds");
                 ComboBox {
                     model: [@tr("15 fps"), @tr("30 fps"), @tr("60 fps")];
                     current-index: WallpaperPreferences.max-fps <= 15 ? 0 : WallpaperPreferences.max-fps <= 30 ? 1 : 2;
                     selected(_) => { WallpaperPreferences.max-fps = self.current-index == 0 ? 15 : self.current-index == 1 ? 30 : 60; }
-                    min-width: 195px;
+                    min-width: 208px;
                 }
             }
         }
 
         if WallpaperPreferences.error != "": Text {
-            text: WallpaperPreferences.error; color: Theme.accent; wrap: word-wrap;
+            text: WallpaperPreferences.error;
+            color: SettingsTokens.danger;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
     }
 }

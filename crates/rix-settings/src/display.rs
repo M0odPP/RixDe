@@ -83,7 +83,7 @@ fn update_display_items(window: &SettingsWindow, model: &Model) {
         .map(|(idx, o)| {
             let hz = ((o.current.mode.refresh_millihz + 500) / 1000).to_string();
             let mode_text = format!(
-                "{}×{} @ {}Hz",
+                "{}×{} · {} Hz",
                 o.current.mode.width, o.current.mode.height, hz
             );
             DisplayItem {

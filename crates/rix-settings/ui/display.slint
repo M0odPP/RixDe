@@ -1,8 +1,7 @@
-import { Theme } from "../../../ui/common/theme.slint";
 import { ToggleSwitch, Slider } from "../../../ui/common/controls.slint";
-import { Button, SpinBox } from "std-widgets.slint";
 import { ComboBox } from "../../../ui/common/combo_box.slint";
-import { SettingsCard, SettingsRow, SettingsDivider, ValueBadge, RixButton } from "card.slint";
+import { SettingsTokens } from "tokens.slint";
+import { SettingsCard, SettingsRow, SettingsDivider, ValueBadge, TagBadge, RixSpinBox, RixButton } from "card.slint";
 
 export struct DisplayItem {
     id: int,
@@ -52,121 +51,224 @@ export global OutputPreferences {
     callback revert();
 }
 
-component Label inherits Text {
-    color: Theme.text-secondary;
-    font-size: Theme.font-size-md;
-    vertical-alignment: center;
-}
+export component DisplayStageTile inherits Rectangle {
+    in property <string> index-label;
+    in property <string> title;
+    in property <string> spec;
+    in property <bool> selected: false;
+    in property <bool> is-primary: false;
+    in property <bool> is-mirrored: false;
+    in property <string> badge-text: "";
+    callback clicked();
 
-export component DisplayView inherits Rectangle {
-    preferred-height: content.preferred-height;
+    min-width: 196px;
+    max-width: 264px;
+    height: 148px;
+    horizontal-stretch: 1;
     vertical-stretch: 0;
-    content := VerticalLayout {
-        spacing: 16px;
 
-        if !OutputPreferences.ready && OutputPreferences.error == "": Label { text: @tr("Loading displays…"); }
-        if OutputPreferences.ready && OutputPreferences.native && OutputPreferences.outputs.length == 0: Label { text: @tr("No displays connected"); }
+    VerticalLayout {
+        spacing: 0px;
+        alignment: center;
 
-        if OutputPreferences.ready && OutputPreferences.native && OutputPreferences.outputs.length > 0: SettingsCard {
-            title: @tr("Display arrangement");
-            subtitle: @tr("Select a screen to configure its placement, resolution and mode");
+        screen := Rectangle {
+            height: 132px;
+            border-radius: SettingsTokens.radius-md;
+            background: tile-touch.has-hover ? SettingsTokens.bg-hover : SettingsTokens.bg-card;
+            border-width: 1px;
+            border-color: SettingsTokens.border-strong;
+            animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
 
-            HorizontalLayout {
-                spacing: 14px;
-                alignment: center;
-                padding-top: 6px;
-                padding-bottom: 6px;
+            Rectangle {
+                width: parent.width;
+                height: parent.height;
+                border-radius: parent.border-radius;
+                background: SettingsTokens.is-light
+                    ? @linear-gradient(180deg, #ffffff 0%, #f3f4f7 100%)
+                    : (SettingsTokens.is-oled
+                        ? @linear-gradient(180deg, #1b1c22 0%, #121318 100%)
+                        : @linear-gradient(180deg, #25272d 0%, #1c1e23 100%));
+                border-width: 1.5px;
+                border-color: SettingsTokens.accent;
+                opacity: root.selected ? 1.0 : 0.0;
+                animate opacity { duration: SettingsTokens.duration-fast; easing: ease-out; }
+            }
 
-                for item[idx] in OutputPreferences.display-items: Rectangle {
-                    min-width: 180px;
-                    max-width: 260px;
-                    height: 120px;
-                    border-radius: Theme.radius-md;
-                    background: OutputPreferences.selected-output == idx ? Theme.surface-active : Theme.control-surface;
-                    border-width: OutputPreferences.selected-output == idx ? 2px : 1px;
-                    border-color: OutputPreferences.selected-output == idx ? Theme.accent : Theme.control-border;
-                    clip: true;
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+                alignment: space-between;
 
-                    VerticalLayout {
-                        padding: 12px;
-                        spacing: 8px;
-                        alignment: space-between;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: space-between;
 
-                        HorizontalLayout {
-                            alignment: space-between;
-
+                    HorizontalLayout {
+                        spacing: 6px;
+                        alignment: start;
+                        VerticalLayout {
+                            alignment: center;
                             Rectangle {
-                                width: 24px;
-                                height: 24px;
-                                border-radius: 12px;
-                                background: OutputPreferences.selected-output == idx ? Theme.accent : Theme.control-border;
-                                Text {
-                                    text: (idx + 1);
-                                    color: OutputPreferences.selected-output == idx ? #ffffff : Theme.text-primary;
-                                    font-size: 12px;
-                                    font-weight: 700;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-
-                            if item.is-primary: Rectangle {
-                                height: 22px;
-                                border-radius: 11px;
-                                background: Theme.accent;
-                                HorizontalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 8px;
-                                    Text {
-                                        text: @tr("Primary");
-                                        color: #ffffff;
-                                        font-size: 11px;
-                                        font-weight: 600;
-                                        vertical-alignment: center;
-                                    }
-                                }
-                            }
-
-                            if item.is-mirrored: Rectangle {
-                                height: 22px;
-                                border-radius: 11px;
-                                background: #e67e22;
-                                HorizontalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 8px;
-                                    Text {
-                                        text: @tr("Mirror");
-                                        color: #ffffff;
-                                        font-size: 11px;
-                                        font-weight: 600;
-                                        vertical-alignment: center;
-                                    }
-                                }
+                                width: 6px;
+                                height: 6px;
+                                border-radius: 3px;
+                                background: root.selected ? SettingsTokens.accent : SettingsTokens.text-muted;
                             }
                         }
-
-                        VerticalLayout {
-                            spacing: 3px;
-                            Text {
-                                text: item.description != "" ? item.description : item.name;
-                                font-size: 13px;
-                                font-weight: 600;
-                                color: Theme.text-primary;
-                                overflow: elide;
-                            }
-                            Text {
-                                text: item.mode-text;
-                                font-size: 11px;
-                                color: Theme.text-secondary;
-                                overflow: elide;
-                            }
+                        Text {
+                            text: root.index-label;
+                            font-family: SettingsTokens.font-mono;
+                            font-size: SettingsTokens.text-xs;
+                            font-weight: 500;
+                            color: root.selected ? SettingsTokens.text-primary : SettingsTokens.text-muted;
+                            vertical-alignment: center;
                         }
                     }
 
-                    TouchArea {
-                        clicked => {
-                            OutputPreferences.select-output(idx);
-                        }
+                    if root.is-primary: TagBadge {
+                        text: @tr("Primary");
+                        success: true;
+                    }
+                    if !root.is-primary && root.is-mirrored: TagBadge {
+                        text: @tr("Mirror");
+                        warning: true;
+                    }
+                    if !root.is-primary && !root.is-mirrored && root.badge-text != "": TagBadge {
+                        text: root.badge-text;
+                    }
+                }
+
+                Rectangle {
+                    height: 28px;
+                    border-radius: 4px;
+                    background: SettingsTokens.is-light ? #17191c08 : #ffffff08;
+                    border-width: 1px;
+                    border-color: SettingsTokens.divider;
+                    Rectangle {
+                        x: (parent.width - self.width) / 2;
+                        y: parent.height - 6px;
+                        width: 44px;
+                        height: 3px;
+                        border-radius: 1.5px;
+                        background: root.selected ? SettingsTokens.accent.with-alpha(0.7) : SettingsTokens.border-strong;
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: 2px;
+                    Text {
+                        text: root.title;
+                        font-size: SettingsTokens.text-md;
+                        font-weight: 500;
+                        color: SettingsTokens.text-primary;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: root.spec;
+                        font-family: SettingsTokens.font-mono;
+                        font-size: SettingsTokens.text-xs;
+                        color: SettingsTokens.text-muted;
+                        overflow: elide;
+                    }
+                }
+            }
+
+            tile-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.clicked(); }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 24px;
+                height: 8px;
+                background: SettingsTokens.border-strong;
+            }
+        }
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 64px;
+                height: 4px;
+                border-radius: 2px;
+                background: root.selected ? SettingsTokens.text-muted : SettingsTokens.border-strong;
+            }
+        }
+    }
+}
+
+export component DisplayView inherits Rectangle {
+    background: transparent;
+    preferred-height: content.preferred-height;
+    vertical-stretch: 0;
+
+    content := VerticalLayout {
+        alignment: start;
+        spacing: 16px;
+
+        if !OutputPreferences.ready && OutputPreferences.error == "": Text {
+            text: @tr("Loading displays…");
+            color: SettingsTokens.text-secondary;
+            font-size: SettingsTokens.text-md;
+        }
+        if OutputPreferences.ready && OutputPreferences.native && OutputPreferences.outputs.length == 0: Text {
+            text: @tr("No displays connected");
+            color: SettingsTokens.text-secondary;
+            font-size: SettingsTokens.text-md;
+        }
+
+        if OutputPreferences.pending: SettingsCard {
+            title: @tr("Keep display changes?");
+            subtitle: @tr("Reverting in ") + OutputPreferences.remaining + @tr(" s");
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+                RixButton {
+                    text: @tr("Revert");
+                    enabled: !OutputPreferences.busy;
+                    clicked => { OutputPreferences.revert(); }
+                }
+                RixButton {
+                    text: @tr("Keep changes");
+                    primary: true;
+                    enabled: !OutputPreferences.busy && OutputPreferences.confirm-ready && OutputPreferences.remaining > 0;
+                    clicked => { OutputPreferences.confirm(); }
+                }
+            }
+        }
+
+        if OutputPreferences.ready && OutputPreferences.native && OutputPreferences.outputs.length > 0: SettingsCard {
+            title: @tr("Display arrangement");
+            subtitle: @tr("Select a monitor to configure its resolution, scale and placement");
+
+            Rectangle {
+                min-height: 184px;
+                border-radius: SettingsTokens.radius-md;
+                background: SettingsTokens.bg-stage;
+                border-width: 1px;
+                border-color: SettingsTokens.border;
+
+                Rectangle { x: 12px; y: 12px; width: 8px; height: 1px; background: SettingsTokens.border-strong; }
+                Rectangle { x: 12px; y: 12px; width: 1px; height: 8px; background: SettingsTokens.border-strong; }
+                Rectangle { x: parent.width - 20px; y: 12px; width: 8px; height: 1px; background: SettingsTokens.border-strong; }
+                Rectangle { x: parent.width - 13px; y: 12px; width: 1px; height: 8px; background: SettingsTokens.border-strong; }
+
+                HorizontalLayout {
+                    padding: 20px;
+                    spacing: 16px;
+                    alignment: center;
+
+                    for item[idx] in OutputPreferences.display-items: DisplayStageTile {
+                        index-label: idx < 9 ? "0" + (idx + 1) : "" + (idx + 1);
+                        title: item.description != "" ? item.description : item.name;
+                        spec: item.mode-text;
+                        selected: OutputPreferences.selected-output == idx;
+                        is-primary: item.is-primary;
+                        is-mirrored: item.is-mirrored;
+                        clicked => { OutputPreferences.select-output(idx); }
                     }
                 }
             }
@@ -175,26 +277,27 @@ export component DisplayView inherits Rectangle {
 
             if OutputPreferences.display-items.length > 1 && OutputPreferences.selected-mirror-index == 0: SettingsRow {
                 title: @tr("Quick placement");
-                subtitle: @tr("Align with adjacent display");
+                subtitle: @tr("Position selected display relative to the adjacent monitor");
                 HorizontalLayout {
-                    spacing: 8px; alignment: end;
-                    Button {
-                        text: @tr("Left of other");
+                    spacing: 8px;
+                    alignment: end;
+                    RixButton {
+                        text: @tr("Left");
                         enabled: !OutputPreferences.busy && !OutputPreferences.pending;
                         clicked => { OutputPreferences.position-left-of(); }
                     }
-                    Button {
-                        text: @tr("Right of other");
+                    RixButton {
+                        text: @tr("Right");
                         enabled: !OutputPreferences.busy && !OutputPreferences.pending;
                         clicked => { OutputPreferences.position-right-of(); }
                     }
-                    Button {
-                        text: @tr("Above other");
+                    RixButton {
+                        text: @tr("Above");
                         enabled: !OutputPreferences.busy && !OutputPreferences.pending;
                         clicked => { OutputPreferences.position-above(); }
                     }
-                    Button {
-                        text: @tr("Below other");
+                    RixButton {
+                        text: @tr("Below");
                         enabled: !OutputPreferences.busy && !OutputPreferences.pending;
                         clicked => { OutputPreferences.position-below(); }
                     }
@@ -203,17 +306,16 @@ export component DisplayView inherits Rectangle {
         }
 
         if OutputPreferences.ready && OutputPreferences.native && OutputPreferences.outputs.length > 0: SettingsCard {
-            title: @tr("Display settings");
-            subtitle: @tr("Mode, resolution, refresh rate and monitor scaling");
+            title: @tr("Output configuration");
 
             SettingsRow {
-                title: @tr("Display screen");
+                title: @tr("Display");
                 ComboBox {
                     model: OutputPreferences.outputs;
                     current-index <=> OutputPreferences.selected-output;
                     enabled: !OutputPreferences.busy && !OutputPreferences.pending;
                     selected(_) => { OutputPreferences.select-output(OutputPreferences.selected-output); }
-                    min-width: 220px;
+                    min-width: 208px;
                 }
             }
 
@@ -221,7 +323,7 @@ export component DisplayView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Primary display");
-                subtitle: @tr("Show main desktop panel and launch new windows here");
+                subtitle: @tr("Show the main panel and open new windows on this monitor");
                 ToggleSwitch {
                     checked <=> OutputPreferences.is-primary;
                     enabled: !OutputPreferences.busy && !OutputPreferences.pending;
@@ -233,13 +335,13 @@ export component DisplayView inherits Rectangle {
 
             if OutputPreferences.mirror-options.length > 1: SettingsRow {
                 title: @tr("Display mode");
-                subtitle: @tr("Extend desktop or duplicate display for capture card / streaming");
+                subtitle: @tr("Extend desktop or mirror another output");
                 ComboBox {
                     model: OutputPreferences.mirror-options;
                     current-index <=> OutputPreferences.selected-mirror-index;
                     enabled: !OutputPreferences.busy && !OutputPreferences.pending;
                     selected(_) => { OutputPreferences.select-mirror(OutputPreferences.selected-mirror-index); }
-                    min-width: 220px;
+                    min-width: 208px;
                 }
             }
 
@@ -247,13 +349,12 @@ export component DisplayView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Resolution");
-                subtitle: @tr("Pixel width and height");
                 ComboBox {
                     model: OutputPreferences.resolutions;
                     current-index <=> OutputPreferences.selected-resolution;
                     enabled: !OutputPreferences.busy && !OutputPreferences.pending;
                     selected(_) => { OutputPreferences.select-resolution(); }
-                    min-width: 220px;
+                    min-width: 208px;
                 }
             }
 
@@ -261,25 +362,26 @@ export component DisplayView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Refresh rate");
-                subtitle: @tr("Display vertical frequency in Hertz");
                 ComboBox {
                     model: OutputPreferences.rates;
                     current-index <=> OutputPreferences.selected-rate;
                     enabled: !OutputPreferences.busy && !OutputPreferences.pending;
-                    min-width: 220px;
+                    min-width: 208px;
                 }
             }
 
             SettingsDivider {}
 
             SettingsRow {
-                title: @tr("Display scale");
-                subtitle: @tr("Scale factor for high DPI displays");
+                title: @tr("Scale");
+                subtitle: @tr("Interface scale factor for high-DPI screens");
                 HorizontalLayout {
-                    spacing: 10px; alignment: center;
+                    spacing: 8px;
+                    alignment: center;
                     Slider {
                         value <=> OutputPreferences.scale-percent;
-                        minimum: 50; maximum: 400;
+                        minimum: 50;
+                        maximum: 400;
                         enabled: !OutputPreferences.busy && !OutputPreferences.pending;
                         min-width: 160px;
                     }
@@ -291,12 +393,11 @@ export component DisplayView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Orientation");
-                subtitle: @tr("Display rotation angle");
                 ComboBox {
-                    model: [@tr("Normal orientation"), @tr("Rotate 90°"), @tr("Rotate 180°"), @tr("Rotate 270°")];
+                    model: [@tr("Normal"), @tr("Rotate 90°"), @tr("Rotate 180°"), @tr("Rotate 270°")];
                     current-index <=> OutputPreferences.rotation;
                     enabled: !OutputPreferences.busy && !OutputPreferences.pending;
-                    min-width: 220px;
+                    min-width: 208px;
                 }
             }
 
@@ -304,7 +405,7 @@ export component DisplayView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Flip display");
-                subtitle: @tr("Invert orientation 180 degrees");
+                subtitle: @tr("Invert output 180 degrees");
                 ToggleSwitch {
                     checked <=> OutputPreferences.flipped;
                     enabled: !OutputPreferences.busy && !OutputPreferences.pending;
@@ -314,8 +415,8 @@ export component DisplayView inherits Rectangle {
             if OutputPreferences.selected-mirror-index == 0: SettingsDivider {}
 
             if OutputPreferences.selected-mirror-index == 0: SettingsRow {
-                title: @tr("Arrange displays automatically");
-                subtitle: @tr("Place secondary monitors adjacent to primary display");
+                title: @tr("Automatic arrangement");
+                subtitle: @tr("Place secondary monitors adjacent to the primary display");
                 ToggleSwitch {
                     checked <=> OutputPreferences.automatic-position;
                     enabled: !OutputPreferences.busy && !OutputPreferences.pending;
@@ -325,43 +426,50 @@ export component DisplayView inherits Rectangle {
             if OutputPreferences.selected-mirror-index == 0 && !OutputPreferences.automatic-position: SettingsDivider {}
 
             if OutputPreferences.selected-mirror-index == 0 && !OutputPreferences.automatic-position: SettingsRow {
-                title: @tr("Display position");
-                subtitle: @tr("X and Y desktop coordinates");
+                title: @tr("Desktop coordinates");
+                subtitle: @tr("Manual X and Y offset in logical pixels");
                 HorizontalLayout {
-                    spacing: 8px; alignment: center;
-                    Label { text: "X:"; }
-                    SpinBox { value <=> OutputPreferences.position-x; minimum: -32768; maximum: 32768; enabled: !OutputPreferences.busy && !OutputPreferences.pending; }
-                    Label { text: "Y:"; }
-                    SpinBox { value <=> OutputPreferences.position-y; minimum: -32768; maximum: 32768; enabled: !OutputPreferences.busy && !OutputPreferences.pending; }
-                }
-            }
-
-            SettingsDivider {}
-
-            HorizontalLayout {
-                alignment: end;
-                padding-top: 4px;
-                padding-bottom: 4px;
-
-                RixButton {
-                    text: @tr("Apply display settings");
-                    primary: true;
-                    enabled: !OutputPreferences.busy && !OutputPreferences.pending;
-                    clicked => { OutputPreferences.apply(); }
+                    spacing: 8px;
+                    alignment: center;
+                    Text {
+                        text: "X";
+                        font-family: SettingsTokens.font-mono;
+                        font-size: SettingsTokens.text-sm;
+                        color: SettingsTokens.text-muted;
+                        vertical-alignment: center;
+                    }
+                    RixSpinBox {
+                        value <=> OutputPreferences.position-x;
+                        minimum: -32768;
+                        maximum: 32768;
+                        step: 10;
+                        readout-min-width: 56px;
+                        enabled: !OutputPreferences.busy && !OutputPreferences.pending;
+                    }
+                    Text {
+                        text: "Y";
+                        font-family: SettingsTokens.font-mono;
+                        font-size: SettingsTokens.text-sm;
+                        color: SettingsTokens.text-muted;
+                        vertical-alignment: center;
+                    }
+                    RixSpinBox {
+                        value <=> OutputPreferences.position-y;
+                        minimum: -32768;
+                        maximum: 32768;
+                        step: 10;
+                        readout-min-width: 56px;
+                        enabled: !OutputPreferences.busy && !OutputPreferences.pending;
+                    }
                 }
             }
         }
 
-        if OutputPreferences.pending: SettingsCard {
-            title: @tr("Confirm display mode change");
-            subtitle: @tr("Reverting in ") + OutputPreferences.remaining + @tr(" s");
-            HorizontalLayout {
-                spacing: 12px; alignment: end;
-                Button { text: @tr("Revert"); enabled: !OutputPreferences.busy; clicked => { OutputPreferences.revert(); } }
-                Button { text: @tr("Keep changes"); primary: true; enabled: !OutputPreferences.busy && OutputPreferences.confirm-ready && OutputPreferences.remaining > 0; clicked => { OutputPreferences.confirm(); } }
-            }
+        if OutputPreferences.error != "": Text {
+            text: OutputPreferences.error;
+            color: SettingsTokens.danger;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
-
-        if OutputPreferences.error != "": Text { text: OutputPreferences.error; color: Theme.accent; font-size: Theme.font-size-md; wrap: word-wrap; }
     }
 }

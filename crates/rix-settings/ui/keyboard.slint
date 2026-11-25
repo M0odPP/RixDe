@@ -1,9 +1,8 @@
-import { Theme } from "../../../ui/common/theme.slint";
 import { ScrollArea } from "../../../ui/common/scroll_area.slint";
-import { Button, SpinBox } from "std-widgets.slint";
 import { ComboBox } from "../../../ui/common/combo_box.slint";
 import { LineEdit } from "../../../ui/common/line_edit.slint";
-import { SettingsCard, SettingsRow, SettingsDivider, RixSpinBox } from "card.slint";
+import { SettingsTokens, SettingsIcons } from "tokens.slint";
+import { SettingsCard, SettingsRow, SettingsDivider, Keycap, ShortcutBadge, RixSpinBox, RixButton, RixIconButton } from "card.slint";
 
 export struct LayoutChoice { code: string, variant: string, name: string, label: string }
 
@@ -25,33 +24,50 @@ export global KeyboardSettings {
 export component KeyboardSettingsView inherits Rectangle {
     private property <bool> adding;
     background: transparent;
-    preferred-height: content.preferred-height;
+    preferred-height: root.adding ? Math.max(content.preferred-height, 520px) : content.preferred-height;
+    vertical-stretch: 0;
+
     content := VerticalLayout {
+        alignment: start;
         spacing: 16px;
 
         SettingsCard {
-            title: @tr("Active keyboard layouts");
-            subtitle: @tr("Input languages and switching order");
+            title: @tr("Active layouts");
+            subtitle: @tr("Input languages in switching order");
 
             for layout[index] in KeyboardSettings.active: VerticalLayout {
                 spacing: 0px;
+                vertical-stretch: 0;
                 if index > 0: SettingsDivider {}
                 SettingsRow {
                     title: layout.name;
-                    subtitle: layout.code + (layout.variant != "" ? " (" + layout.variant + ")" : "");
+                    subtitle: layout.code + (layout.variant != "" ? " · " + layout.variant : "");
                     HorizontalLayout {
-                        spacing: 8px; alignment: center;
-                        Rectangle {
-                            width: 38px; height: 26px; border-radius: 4px;
-                            background: Theme.accent.with-alpha(0.14);
-                            Text {
-                                text: layout.label; color: Theme.accent; font-weight: 700;
-                                horizontal-alignment: center; vertical-alignment: center;
-                            }
+                        spacing: 8px;
+                        alignment: center;
+                        VerticalLayout {
+                            alignment: center;
+                            Keycap { label: layout.label; min-width: 36px; }
                         }
-                        Button { text: "↑"; enabled: index > 0; clicked => { KeyboardSettings.move(index, -1); } }
-                        Button { text: "↓"; enabled: index < KeyboardSettings.active.length - 1; clicked => { KeyboardSettings.move(index, 1); } }
-                        Button { text: @tr("Delete"); enabled: KeyboardSettings.active.length > 1; clicked => { KeyboardSettings.remove(index); } }
+                        RixIconButton {
+                            icon: SettingsIcons.arrow-up;
+                            accessible-name: @tr("Move up");
+                            enabled: index > 0;
+                            clicked => { KeyboardSettings.move(index, -1); }
+                        }
+                        RixIconButton {
+                            icon: SettingsIcons.arrow-down;
+                            accessible-name: @tr("Move down");
+                            enabled: index < KeyboardSettings.active.length - 1;
+                            clicked => { KeyboardSettings.move(index, 1); }
+                        }
+                        RixIconButton {
+                            icon: SettingsIcons.trash;
+                            accessible-name: @tr("Delete");
+                            destructive: true;
+                            enabled: KeyboardSettings.active.length > 1;
+                            clicked => { KeyboardSettings.remove(index); }
+                        }
                     }
                 }
             }
@@ -59,8 +75,9 @@ export component KeyboardSettingsView inherits Rectangle {
             SettingsDivider {}
 
             HorizontalLayout {
-                Button {
-                    text: root.adding ? @tr("Close layout catalog") : @tr("Add keyboard layout…");
+                RixButton {
+                    text: root.adding ? @tr("Close catalog") : @tr("Add layout");
+                    icon: root.adding ? SettingsIcons.close : SettingsIcons.plus;
                     enabled: KeyboardSettings.active.length < 8 || root.adding;
                     clicked => { root.adding = !root.adding; }
                 }
@@ -69,31 +86,40 @@ export component KeyboardSettingsView inherits Rectangle {
         }
 
         SettingsCard {
-            title: @tr("Layout switching shortcut");
-            subtitle: @tr("Key combination used to cycle through installed layouts");
+            title: @tr("Layout switching");
 
             SettingsRow {
-                title: @tr("Switch layout shortcut");
-                subtitle: @tr("Global hotkey for input language switching");
-                ComboBox {
-                    model: ["Alt + Shift", "Ctrl + Shift", @tr("Win + Space"), "Caps Lock", @tr("Right Alt"), @tr("None")];
-                    current-index <=> KeyboardSettings.switch-index;
-                    min-width: 195px;
+                title: @tr("Switch shortcut");
+                subtitle: @tr("Global key combination to cycle input languages");
+                HorizontalLayout {
+                    spacing: 12px;
+                    alignment: center;
+                    if KeyboardSettings.switch-index == 0: ShortcutBadge { first: "Alt"; second: "Shift"; }
+                    if KeyboardSettings.switch-index == 1: ShortcutBadge { first: "Ctrl"; second: "Shift"; }
+                    if KeyboardSettings.switch-index == 2: ShortcutBadge { first: "Win"; second: "Space"; }
+                    if KeyboardSettings.switch-index == 3: ShortcutBadge { first: "Caps"; }
+                    if KeyboardSettings.switch-index == 4: ShortcutBadge { first: "R-Alt"; }
+                    ComboBox {
+                        model: ["Alt + Shift", "Ctrl + Shift", @tr("Win + Space"), "Caps Lock", @tr("Right Alt"), @tr("None")];
+                        current-index <=> KeyboardSettings.switch-index;
+                        min-width: 180px;
+                    }
                 }
             }
         }
 
         SettingsCard {
-            title: @tr("Key repeat and responsiveness");
-            subtitle: @tr("Typing speed and delay before repeating keys");
+            title: @tr("Key repeat");
 
             SettingsRow {
                 title: @tr("Repeat rate");
-                subtitle: @tr("Characters repeated per second when holding down a key");
+                subtitle: @tr("Characters repeated per second when holding a key");
                 RixSpinBox {
-                    minimum: 1; maximum: 100;
+                    minimum: 1;
+                    maximum: 100;
                     value <=> KeyboardSettings.repeat-rate;
                     suffix: " " + @tr("char/s");
+                    readout-min-width: 84px;
                 }
             }
 
@@ -101,50 +127,109 @@ export component KeyboardSettingsView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Repeat delay");
-                subtitle: @tr("Milliseconds before a held key starts repeating");
+                subtitle: @tr("Time before a held key begins repeating");
                 RixSpinBox {
-                    minimum: 100; maximum: 2000; step: 50;
+                    minimum: 100;
+                    maximum: 2000;
+                    step: 50;
                     value <=> KeyboardSettings.repeat-delay;
                     suffix: " ms";
+                    readout-min-width: 84px;
                 }
             }
         }
 
         if KeyboardSettings.error != "": Text {
-            text: KeyboardSettings.error; color: Theme.danger; wrap: word-wrap;
+            text: KeyboardSettings.error;
+            color: SettingsTokens.danger;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
     }
 
     if root.adding: Rectangle {
-        x: 0; y: 0; width: root.width; height: 420px;
-        background: Theme.window-background.with-alpha(0.85);
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        border-radius: SettingsTokens.radius-lg;
+        background: SettingsTokens.bg-canvas.with-alpha(0.92);
         TouchArea {}
+
         Rectangle {
-            x: 20px; y: 20px; width: parent.width - 40px; height: parent.height - 40px;
-            background: Theme.surface; border-width: 1px; border-color: Theme.border; border-radius: Theme.radius-md;
+            x: 16px;
+            y: 16px;
+            width: parent.width - 32px;
+            height: Math.min(480px, parent.height - 32px);
+            background: SettingsTokens.bg-card;
+            border-width: 1px;
+            border-color: SettingsTokens.border-strong;
+            border-radius: SettingsTokens.radius-lg;
+
             VerticalLayout {
-                padding: 16px; spacing: 12px;
+                padding: 20px;
+                spacing: 12px;
+
                 HorizontalLayout {
-                    Text { text: @tr("Keyboard layout catalog"); font-size: 16px; font-weight: 600; color: Theme.text-primary; horizontal-stretch: 1; }
-                    Button { text: @tr("Close"); clicked => { root.adding = false; } }
+                    spacing: 12px;
+                    Text {
+                        text: @tr("Keyboard layout catalog");
+                        font-size: SettingsTokens.text-lg;
+                        font-weight: 500;
+                        color: SettingsTokens.text-primary;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    RixIconButton {
+                        icon: SettingsIcons.close;
+                        accessible-name: @tr("Close");
+                        clicked => { root.adding = false; }
+                    }
                 }
+
                 LineEdit {
-                    placeholder-text: @tr("Search layout by language or country…");
+                    leading-icon: SettingsIcons.search;
+                    has-icon: true;
+                    placeholder-text: @tr("Search layouts");
                     text <=> KeyboardSettings.query;
                     edited(value) => { KeyboardSettings.search(value); }
                 }
+
                 ScrollArea {
                     vertical-stretch: 1;
                     content-height: cat-list.preferred-height;
                     cat-list := VerticalLayout {
-                        width: parent.content-width; spacing: 4px;
+                        width: parent.content-width;
+                        spacing: 4px;
                         for item in KeyboardSettings.catalog: Rectangle {
-                            height: 48px; border-radius: Theme.radius-sm; background: Theme.control-surface;
+                            height: 44px;
+                            border-radius: SettingsTokens.radius-md;
+                            background: cat-touch.has-hover ? SettingsTokens.bg-hover : SettingsTokens.bg-raised;
+                            border-width: 1px;
+                            border-color: SettingsTokens.border;
+                            animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
+                            cat-touch := TouchArea {}
                             HorizontalLayout {
-                                padding-left: 14px; padding-right: 14px; spacing: 10px; alignment: center;
-                                Text { text: item.name; color: Theme.text-primary; horizontal-stretch: 1; vertical-alignment: center; }
-                                Text { text: item.code + (item.variant != "" ? " (" + item.variant + ")" : ""); color: Theme.text-secondary; font-size: 12px; vertical-alignment: center; }
-                                Button {
+                                padding-left: 12px;
+                                padding-right: 8px;
+                                spacing: 12px;
+                                alignment: center;
+                                Text {
+                                    text: item.name;
+                                    color: SettingsTokens.text-primary;
+                                    font-size: SettingsTokens.text-md;
+                                    horizontal-stretch: 1;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: item.code + (item.variant != "" ? " · " + item.variant : "");
+                                    font-family: SettingsTokens.font-mono;
+                                    color: SettingsTokens.text-muted;
+                                    font-size: SettingsTokens.text-xs;
+                                    vertical-alignment: center;
+                                }
+                                RixButton {
                                     text: @tr("Add");
                                     clicked => { KeyboardSettings.add(item.code, item.variant); root.adding = false; }
                                 }

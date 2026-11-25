@@ -1,17 +1,74 @@
-import { Theme } from "../../../ui/common/theme.slint";
+import { SettingsTokens, SettingsIcons } from "tokens.slint";
+
+export component Keycap inherits Rectangle {
+    in property <string> label;
+    height: 22px;
+    min-width: 22px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: SettingsTokens.radius-xs;
+    background: SettingsTokens.bg-raised;
+    border-width: 1px;
+    border-color: SettingsTokens.border-strong;
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 6px;
+        alignment: center;
+        Text {
+            text: root.label;
+            font-family: SettingsTokens.font-mono;
+            font-size: SettingsTokens.text-xs;
+            font-weight: 500;
+            color: SettingsTokens.text-secondary;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+export component ShortcutBadge inherits HorizontalLayout {
+    in property <string> first;
+    in property <string> second: "";
+    spacing: 4px;
+    alignment: center;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+
+    VerticalLayout {
+        alignment: center;
+        Keycap { label: root.first; }
+    }
+    if root.second != "": Text {
+        text: "+";
+        font-family: SettingsTokens.font-mono;
+        font-size: SettingsTokens.text-xs;
+        color: SettingsTokens.text-muted;
+        vertical-alignment: center;
+    }
+    if root.second != "": VerticalLayout {
+        alignment: center;
+        Keycap { label: root.second; }
+    }
+}
 
 export component SettingsCard inherits Rectangle {
     in property <string> title: "";
     in property <string> subtitle: "";
     in property <string> badge: "";
-    background: Theme.surface;
-    border-radius: Theme.radius-md;
+    in property <string> key-first: "";
+    in property <string> key-second: "";
+
+    background: SettingsTokens.bg-card;
+    border-radius: SettingsTokens.radius-lg;
     border-width: 1px;
-    border-color: Theme.border;
+    border-color: SettingsTokens.border;
     preferred-height: card-layout.preferred-height;
+    min-height: card-layout.preferred-height;
     vertical-stretch: 0;
 
     card-layout := VerticalLayout {
+        alignment: start;
         padding-top: 16px;
         padding-bottom: 16px;
         padding-left: 20px;
@@ -19,42 +76,47 @@ export component SettingsCard inherits Rectangle {
         spacing: 12px;
 
         if root.title != "": HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: 12px;
             VerticalLayout {
                 horizontal-stretch: 1;
-                spacing: 2px;
+                vertical-stretch: 0;
+                alignment: start;
+                spacing: 4px;
                 Text {
                     text: root.title;
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: Theme.text-primary;
+                    font-size: SettingsTokens.text-lg;
+                    font-weight: 500;
+                    color: SettingsTokens.text-primary;
                 }
                 if root.subtitle != "": Text {
                     text: root.subtitle;
-                    font-size: 12px;
-                    color: Theme.text-secondary;
+                    font-size: SettingsTokens.text-sm;
+                    font-weight: 400;
+                    color: SettingsTokens.text-muted;
                     wrap: word-wrap;
+                }
+            }
+            if root.key-first != "": VerticalLayout {
+                horizontal-stretch: 0;
+                vertical-stretch: 0;
+                alignment: center;
+                ShortcutBadge {
+                    first: root.key-first;
+                    second: root.key-second;
                 }
             }
             if root.badge != "": VerticalLayout {
                 horizontal-stretch: 0;
+                vertical-stretch: 0;
                 alignment: center;
-                Rectangle {
-                    height: 22px;
-                    border-radius: 6px;
-                    background: Theme.control-surface;
-                    border-width: 1px;
-                    border-color: Theme.control-border;
-                    HorizontalLayout {
-                        padding-left: 8px; padding-right: 8px;
-                        alignment: center;
-                        Text {
-                            text: root.badge;
-                            color: Theme.text-secondary;
-                            font-size: 11px;
-                            font-weight: 500;
-                            vertical-alignment: center;
-                        }
-                    }
+                Text {
+                    text: root.badge;
+                    font-family: SettingsTokens.font-mono;
+                    font-size: SettingsTokens.text-xs;
+                    font-weight: 400;
+                    color: SettingsTokens.text-muted;
+                    vertical-alignment: center;
                 }
             }
         }
@@ -70,31 +132,36 @@ export component SettingsRow inherits Rectangle {
     vertical-stretch: 0;
 
     row-layout := HorizontalLayout {
-        spacing: 20px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        spacing: 24px;
 
         VerticalLayout {
             horizontal-stretch: 1;
+            vertical-stretch: 0;
             alignment: center;
             spacing: 2px;
             Text {
                 text: root.title;
-                color: Theme.text-primary;
-                font-size: 13.5px;
+                color: SettingsTokens.text-primary;
+                font-size: SettingsTokens.text-md;
                 font-weight: 500;
             }
             if root.subtitle != "": Text {
                 text: root.subtitle;
-                color: Theme.text-secondary;
-                font-size: 12px;
+                color: SettingsTokens.text-secondary;
+                font-size: SettingsTokens.text-sm;
+                font-weight: 400;
                 wrap: word-wrap;
             }
         }
 
         VerticalLayout {
             horizontal-stretch: 0;
+            vertical-stretch: 0;
             alignment: center;
             HorizontalLayout {
-                spacing: 10px;
+                spacing: 8px;
                 alignment: end;
                 @children
             }
@@ -104,47 +171,68 @@ export component SettingsRow inherits Rectangle {
 
 export component SettingsDivider inherits Rectangle {
     height: 1px;
-    background: Theme.divider;
+    background: SettingsTokens.divider;
     vertical-stretch: 0;
 }
 
 export component ValueBadge inherits Rectangle {
     in property <string> text;
-    min-width: 54px;
-    height: 26px;
-    border-radius: 6px;
-    background: Theme.control-surface;
-    border-width: 1px;
-    border-color: Theme.control-border;
-    HorizontalLayout {
-        padding-left: 8px; padding-right: 8px;
-        alignment: center;
-        Text {
-            text: root.text;
-            color: Theme.text-primary;
-            font-size: 12px;
-            font-weight: 500;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
+    in property <length> readout-width: 56px;
+    min-width: root.readout-width;
+    height: 24px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        color: SettingsTokens.text-secondary;
+        font-family: SettingsTokens.font-mono;
+        font-size: SettingsTokens.text-sm;
+        font-weight: 400;
+        horizontal-alignment: right;
+        vertical-alignment: center;
     }
 }
 
 export component TagBadge inherits Rectangle {
     in property <string> text;
     in property <bool> success: false;
+    in property <bool> warning: false;
     height: 20px;
-    border-radius: 5px;
-    background: root.success ? #10b981.with-alpha(0.14) : Theme.control-surface;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: SettingsTokens.radius-xs;
+    background: root.success ? SettingsTokens.positive-subtle
+        : root.warning ? SettingsTokens.warning-subtle
+        : SettingsTokens.bg-raised;
     border-width: 1px;
-    border-color: root.success ? #10b981.with-alpha(0.28) : Theme.control-border;
+    border-color: root.success ? SettingsTokens.positive-border
+        : root.warning ? SettingsTokens.warning-border
+        : SettingsTokens.border;
+
     HorizontalLayout {
-        padding-left: 7px; padding-right: 7px;
+        padding-left: 6px;
+        padding-right: 6px;
+        spacing: 4px;
         alignment: center;
+        if root.success || root.warning: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 5px;
+                height: 5px;
+                border-radius: 2.5px;
+                background: root.success ? SettingsTokens.positive : SettingsTokens.warning;
+            }
+        }
         Text {
             text: root.text;
-            color: root.success ? #34d399 : Theme.text-secondary;
-            font-size: 11px;
+            color: root.success ? SettingsTokens.positive
+                : root.warning ? SettingsTokens.warning
+                : SettingsTokens.text-secondary;
+            font-family: SettingsTokens.font-mono;
+            font-size: SettingsTokens.text-xs;
             font-weight: 500;
             vertical-alignment: center;
         }
@@ -158,77 +246,102 @@ export component RixSpinBox inherits Rectangle {
     in property <int> step: 1;
     in property <string> suffix: "";
     in property <bool> enabled: true;
+    in property <length> readout-min-width: 64px;
     callback changed(int);
 
     height: 32px;
-    border-radius: Theme.radius-sm;
-    background: Theme.control-surface;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: SettingsTokens.radius-md;
+    background: SettingsTokens.bg-raised;
     border-width: 1px;
-    border-color: Theme.control-border;
-    opacity: root.enabled ? 1.0 : 0.5;
+    border-color: keys.has-focus ? SettingsTokens.accent : SettingsTokens.border-strong;
+    opacity: root.enabled ? 1.0 : 0.45;
+    forward-focus: keys;
+    animate border-color { duration: SettingsTokens.duration-fast; easing: ease-out; }
+
+    function adjust(delta: int) {
+        let next = Math.clamp(root.value + delta, root.minimum, root.maximum);
+        if next != root.value {
+            root.value = next;
+            root.changed(next);
+        }
+    }
+
+    keys := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.UpArrow || event.text == Key.RightArrow { root.adjust(root.step); return accept; }
+            if event.text == Key.DownArrow || event.text == Key.LeftArrow { root.adjust(-root.step); return accept; }
+            reject
+        }
+    }
 
     HorizontalLayout {
-
         Rectangle {
             width: 32px;
-            background: minus-touch.pressed ? Theme.surface-active : (minus-touch.has-hover ? Theme.surface-hover : transparent);
-            border-top-left-radius: Theme.radius-sm;
-            border-bottom-left-radius: Theme.radius-sm;
-            Text {
-                text: "−";
-                font-size: 15px;
-                font-weight: 600;
-                color: root.enabled && root.value > root.minimum ? Theme.text-primary : Theme.text-muted;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            background: minus-touch.pressed ? SettingsTokens.bg-active
+                : (minus-touch.has-hover ? SettingsTokens.bg-hover : transparent);
+            border-top-left-radius: SettingsTokens.radius-md - 1px;
+            border-bottom-left-radius: SettingsTokens.radius-md - 1px;
+            animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
+            Image {
+                source: SettingsIcons.minus;
+                width: 14px;
+                height: 14px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                colorize: root.enabled && root.value > root.minimum ? SettingsTokens.text-primary : SettingsTokens.text-muted;
+                image-fit: contain;
             }
             minus-touch := TouchArea {
                 enabled: root.enabled && root.value > root.minimum;
-                clicked => {
-                    root.value = Math.max(root.minimum, root.value - root.step);
-                    root.changed(root.value);
-                }
+                mouse-cursor: self.enabled ? pointer : default;
+                clicked => { keys.focus(); root.adjust(-root.step); }
             }
         }
 
-        Rectangle { width: 1px; background: Theme.divider; }
+        Rectangle { width: 1px; background: SettingsTokens.divider; }
 
         Rectangle {
-            min-width: 58px;
+            min-width: root.readout-min-width;
             HorizontalLayout {
-                padding-left: 8px; padding-right: 8px;
+                padding-left: 8px;
+                padding-right: 8px;
                 Text {
                     text: root.value + root.suffix;
-                    font-size: 12.5px;
+                    font-family: SettingsTokens.font-mono;
+                    font-size: SettingsTokens.text-sm;
                     font-weight: 500;
-                    color: Theme.text-primary;
+                    color: SettingsTokens.text-primary;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
             }
         }
 
-        Rectangle { width: 1px; background: Theme.divider; }
+        Rectangle { width: 1px; background: SettingsTokens.divider; }
 
         Rectangle {
             width: 32px;
-            background: plus-touch.pressed ? Theme.surface-active : (plus-touch.has-hover ? Theme.surface-hover : transparent);
-            border-top-right-radius: Theme.radius-sm;
-            border-bottom-right-radius: Theme.radius-sm;
-            Text {
-                text: "+";
-                font-size: 15px;
-                font-weight: 600;
-                color: root.enabled && root.value < root.maximum ? Theme.text-primary : Theme.text-muted;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            background: plus-touch.pressed ? SettingsTokens.bg-active
+                : (plus-touch.has-hover ? SettingsTokens.bg-hover : transparent);
+            border-top-right-radius: SettingsTokens.radius-md - 1px;
+            border-bottom-right-radius: SettingsTokens.radius-md - 1px;
+            animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
+            Image {
+                source: SettingsIcons.plus;
+                width: 14px;
+                height: 14px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                colorize: root.enabled && root.value < root.maximum ? SettingsTokens.text-primary : SettingsTokens.text-muted;
+                image-fit: contain;
             }
             plus-touch := TouchArea {
                 enabled: root.enabled && root.value < root.maximum;
-                clicked => {
-                    root.value = Math.min(root.maximum, root.value + root.step);
-                    root.changed(root.value);
-                }
+                mouse-cursor: self.enabled ? pointer : default;
+                clicked => { keys.focus(); root.adjust(root.step); }
             }
         }
     }
@@ -239,53 +352,276 @@ export component RixButton inherits Rectangle {
     in property <image> icon;
     in property <bool> primary: false;
     in property <bool> destructive: false;
+    in property <bool> ghost: false;
     in property <bool> enabled: true;
     callback clicked();
 
     height: 32px;
     min-width: 64px;
-    border-radius: Theme.radius-sm;
+    border-radius: SettingsTokens.radius-md;
     horizontal-stretch: 0;
     vertical-stretch: 0;
     opacity: root.enabled ? 1.0 : 0.45;
+    forward-focus: keys;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
 
     background: !root.enabled
-        ? (root.primary ? Theme.accent.with-alpha(0.35) : Theme.control-surface)
-        : (root.primary
-            ? (touch.pressed ? Theme.accent.darker(15%) : (touch.has-hover ? Theme.accent-hover : Theme.accent))
-            : (touch.pressed ? Theme.surface-active : (touch.has-hover ? Theme.surface-hover : Theme.control-surface)));
+        ? (root.primary ? SettingsTokens.primary-bg.with-alpha(0.35)
+            : root.ghost ? transparent : SettingsTokens.bg-raised)
+        : root.primary
+            ? (touch.pressed ? SettingsTokens.primary-pressed
+                : (touch.has-hover ? SettingsTokens.primary-hover : SettingsTokens.primary-bg))
+            : root.destructive
+                ? (touch.pressed ? SettingsTokens.danger-subtle.darker(10%)
+                    : (touch.has-hover ? SettingsTokens.danger-subtle : SettingsTokens.bg-raised))
+                : root.ghost
+                    ? (touch.pressed ? SettingsTokens.bg-active
+                        : (touch.has-hover ? SettingsTokens.bg-hover : transparent))
+                    : (touch.pressed ? SettingsTokens.bg-active
+                        : (touch.has-hover ? SettingsTokens.bg-hover : SettingsTokens.bg-raised));
 
-    border-width: root.primary ? 0px : 1px;
-    border-color: touch.has-hover ? Theme.accent.with-alpha(0.4) : Theme.control-border;
+    border-width: root.primary ? (keys.has-focus ? 1px : 0px)
+        : root.ghost ? (keys.has-focus ? 1px : 0px) : 1px;
+    border-color: keys.has-focus ? SettingsTokens.accent
+        : root.destructive ? SettingsTokens.danger-border
+        : (touch.has-hover ? SettingsTokens.border-strong : SettingsTokens.border);
+    animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
+    animate border-color { duration: SettingsTokens.duration-fast; easing: ease-out; }
 
     HorizontalLayout {
-        padding-left: 14px;
-        padding-right: 14px;
-        spacing: 6px;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 8px;
         alignment: center;
 
-        if root.icon.width > 0: Image {
-            source: root.icon;
-            width: 15px;
-            height: 15px;
-            colorize: root.primary ? #ffffff : (root.destructive ? Theme.danger : Theme.text-primary);
-            image-fit: contain;
-            vertical-alignment: center;
+        if root.icon.width > 0: VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                width: 15px;
+                height: 15px;
+                colorize: root.primary ? SettingsTokens.primary-fg
+                    : (root.destructive ? SettingsTokens.danger : SettingsTokens.text-secondary);
+                image-fit: contain;
+            }
         }
 
         Text {
             text: root.text;
-            color: root.primary ? #ffffff : (root.destructive ? Theme.danger : Theme.text-primary);
-            font-size: 13px;
-            font-weight: root.primary ? 600 : 500;
+            color: root.primary ? SettingsTokens.primary-fg
+                : (root.destructive ? SettingsTokens.danger : SettingsTokens.text-primary);
+            font-size: SettingsTokens.text-md;
+            font-weight: 500;
             vertical-alignment: center;
             horizontal-alignment: center;
+        }
+    }
+
+    keys := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if e.text == Key.Return || e.text == " " { root.clicked(); return accept; }
+            reject
         }
     }
 
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
-        clicked => { root.clicked(); }
+        clicked => { keys.focus(); root.clicked(); }
+    }
+}
+
+export component RixIconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> accessible-name: "";
+    in property <bool> destructive: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: 32px;
+    height: 32px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: SettingsTokens.radius-md;
+    opacity: root.enabled ? 1.0 : 0.4;
+    forward-focus: keys;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+
+    background: !root.enabled ? SettingsTokens.bg-raised
+        : root.destructive
+            ? (touch.pressed ? SettingsTokens.danger-subtle.darker(10%)
+                : touch.has-hover ? SettingsTokens.danger-subtle : SettingsTokens.bg-raised)
+            : (touch.pressed ? SettingsTokens.bg-active
+                : touch.has-hover ? SettingsTokens.bg-hover : SettingsTokens.bg-raised);
+
+    border-width: 1px;
+    border-color: keys.has-focus ? SettingsTokens.accent
+        : root.destructive && touch.has-hover ? SettingsTokens.danger-border
+        : (touch.has-hover ? SettingsTokens.border-strong : SettingsTokens.border);
+    animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
+    animate border-color { duration: SettingsTokens.duration-fast; easing: ease-out; }
+
+    Image {
+        source: root.icon;
+        width: 16px;
+        height: 16px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: root.destructive && touch.has-hover ? SettingsTokens.danger : SettingsTokens.text-secondary;
+        image-fit: contain;
+    }
+
+    keys := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if e.text == Key.Return || e.text == " " { root.clicked(); return accept; }
+            reject
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { keys.focus(); root.clicked(); }
+    }
+}
+
+export component RixCheckBox inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked: false;
+    in property <bool> enabled: true;
+    callback toggled();
+
+    height: 28px;
+    preferred-width: content.preferred-width;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    opacity: root.enabled ? 1.0 : 0.45;
+    forward-focus: keys;
+    accessible-role: checkbox;
+    accessible-label: root.text;
+    accessible-checked: root.checked;
+
+    content := HorizontalLayout {
+        spacing: 8px;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                border-radius: SettingsTokens.radius-xs;
+                background: root.checked ? SettingsTokens.accent : SettingsTokens.bg-raised;
+                border-width: 1px;
+                border-color: keys.has-focus ? SettingsTokens.text-primary
+                    : root.checked ? SettingsTokens.accent : SettingsTokens.border-strong;
+                animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
+
+                if root.checked: Image {
+                    source: SettingsIcons.check;
+                    width: 12px;
+                    height: 12px;
+                    x: 2px;
+                    y: 2px;
+                    colorize: #ffffff;
+                    image-fit: contain;
+                }
+            }
+        }
+
+        if root.text != "": Text {
+            text: root.text;
+            font-size: SettingsTokens.text-md;
+            font-weight: 400;
+            color: SettingsTokens.text-primary;
+            vertical-alignment: center;
+        }
+    }
+
+    keys := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if e.text == " " || e.text == Key.Return {
+                root.checked = !root.checked;
+                root.toggled();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            keys.focus();
+            root.checked = !root.checked;
+            root.toggled();
+        }
+    }
+}
+
+export component SegmentedControl inherits Rectangle {
+    in property <[string]> options;
+    in-out property <int> current-index: 0;
+    in property <bool> enabled: true;
+    callback selected(int);
+
+    height: 36px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: SettingsTokens.radius-md;
+    background: SettingsTokens.bg-stage;
+    border-width: 1px;
+    border-color: SettingsTokens.border;
+    opacity: root.enabled ? 1.0 : 0.45;
+
+    HorizontalLayout {
+        padding: 3px;
+        spacing: 2px;
+
+        for opt[idx] in root.options: Rectangle {
+            min-width: 72px;
+            height: 28px;
+            border-radius: 5px;
+            background: idx == root.current-index ? SettingsTokens.bg-card
+                : seg-touch.has-hover ? SettingsTokens.bg-hover-subtle : transparent;
+            border-width: idx == root.current-index ? 1px : 0px;
+            border-color: SettingsTokens.border-strong;
+            animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                alignment: center;
+                Text {
+                    text: opt;
+                    font-size: SettingsTokens.text-sm;
+                    font-weight: idx == root.current-index ? 500 : 400;
+                    color: idx == root.current-index ? SettingsTokens.text-primary : SettingsTokens.text-secondary;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+            }
+
+            seg-touch := TouchArea {
+                enabled: root.enabled;
+                mouse-cursor: root.enabled ? pointer : default;
+                clicked => {
+                    if root.current-index != idx {
+                        root.current-index = idx;
+                        root.selected(idx);
+                    }
+                }
+            }
+        }
     }
 }

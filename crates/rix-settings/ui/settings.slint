@@ -6,7 +6,7 @@ export { WindowAppearancePreferences, AppearanceRuleRow }
 import { BundledThemes, InstalledTheme, BundledThemesView } from "bundled_themes.slint";
 export { BundledThemes, InstalledTheme }
 export { PowerPreferences }
-import { OutputPreferences, DisplayView } from "display.slint";
+import { OutputPreferences, DisplayView, DisplayStageTile } from "display.slint";
 export { OutputPreferences }
 import { Slider, ToggleSwitch } from "../../../ui/common/controls.slint";
 import { PluginChoice, PluginSettings, PluginsView } from "plugins.slint";
@@ -32,9 +32,21 @@ import { Theme } from "../../../ui/common/theme.slint";
 export { Palette } from "std-widgets.slint";
 export { Theme } from "../../../ui/common/theme.slint";
 export { SkinFrame, SkinRenderer } from "../../../ui/common/frame.slint";
-import { Button, CheckBox, SpinBox, ScrollView, ListView } from "std-widgets.slint";
 import { ComboBox } from "../../../ui/common/combo_box.slint";
 import { LineEdit } from "../../../ui/common/line_edit.slint";
+import { SettingsTokens, SettingsIcons } from "tokens.slint";
+import {
+    SettingsCard,
+    SettingsRow,
+    SettingsDivider,
+    ValueBadge,
+    TagBadge,
+    RixSpinBox,
+    RixButton,
+    RixIconButton,
+    RixCheckBox,
+    SegmentedControl,
+} from "card.slint";
 
 export struct NavigationItem {
     tab-id: int,
@@ -48,38 +60,6 @@ export struct PanelWidgetSetting { id: string, kind: string, label: string, sect
 export struct StyleSetting { key: string, group: string, value: string, number: float, limit: float }
 export struct LauncherActionSetting { action: string, label: string, icon: string, end: bool, icon-only: bool, visible: bool }
 
-import { SettingsCard, SettingsRow, SettingsDivider, ValueBadge, TagBadge, RixSpinBox, RixButton } from "card.slint";
-
-component ActionEditor inherits Rectangle {
-    in-out property <LauncherActionSetting> item;
-    callback edited(LauncherActionSetting);
-    callback move(int);
-    min-height: 112px;
-    border-radius: Theme.radius-sm; background: Theme.surface;
-    border-width: 1px; border-color: Theme.border;
-    VerticalLayout {
-        padding: 10px; spacing: 8px;
-        HorizontalLayout {
-            CheckBox { text: @tr("Show"); checked: root.item.visible; toggled => { root.item.visible = self.checked; root.edited(root.item); } }
-            Rectangle { horizontal-stretch: 1; }
-            Button { text: @tr("Move up"); clicked => { root.move(-1); } }
-            Button { text: @tr("Move down"); clicked => { root.move(1); } }
-        }
-        HorizontalLayout {
-            LineEdit { text: root.item.label; placeholder-text: @tr("Label"); edited(value) => { root.item.label = value; root.edited(root.item); } }
-            LineEdit { text: root.item.icon; placeholder-text: @tr("Theme icon name or SVG path"); edited(value) => { root.item.icon = value; root.edited(root.item); } }
-        }
-        HorizontalLayout {
-            CheckBox { text: @tr("Right"); checked: root.item.end; toggled => { root.item.end = self.checked; root.edited(root.item); } }
-            CheckBox { text: @tr("Icon only"); checked: root.item.icon-only; toggled => { root.item.icon-only = self.checked; root.edited(root.item); } }
-        }
-    }
-}
-
-component Heading inherits Text { color: Theme.text-primary; font-size: 20px; font-weight: 600; }
-component Label inherits Text { color: Theme.text-secondary; font-size: 13px; vertical-alignment: center; }
-component Note inherits Text { color: Theme.text-muted; font-size: 12px; wrap: word-wrap; }
-
 export struct ThemePresetData {
     name: string,
     id: string,
@@ -88,6 +68,227 @@ export struct ThemePresetData {
 export struct SelectionItem {
     name: string,
     is_selected: bool,
+}
+
+component ThemePreviewCard inherits Rectangle {
+    in property <string> name;
+    in property <string> caption;
+    in property <bool> selected: false;
+    in property <color> sky-top;
+    in property <color> sky-bottom;
+    in property <color> win-bg;
+    in property <color> win-sidebar;
+    in property <color> win-border;
+    in property <color> win-ink;
+    in property <color> dock-bg;
+    in property <color> accent-dot;
+    callback clicked();
+
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    border-radius: 10px;
+    background: root.selected ? SettingsTokens.bg-raised
+        : card-touch.has-hover ? SettingsTokens.bg-hover-subtle : SettingsTokens.bg-stage;
+    border-width: root.selected ? 1.5px : 1px;
+    border-color: root.selected ? SettingsTokens.accent : SettingsTokens.border;
+    animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
+    animate border-color { duration: SettingsTokens.duration-fast; easing: ease-out; }
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 10px;
+
+        Rectangle {
+            height: 96px;
+            border-radius: SettingsTokens.radius-sm;
+            background: @linear-gradient(160deg, root.sky-top 0%, root.sky-bottom 100%);
+            border-width: 1px;
+            border-color: root.win-border;
+            cache-rendering-hint: true;
+
+            Rectangle {
+                x: 12px;
+                y: 12px;
+                width: parent.width - 24px;
+                height: 58px;
+                border-radius: 5px;
+                background: root.win-bg;
+                border-width: 1px;
+                border-color: root.win-border;
+
+                Rectangle {
+                    x: 1px;
+                    y: 1px;
+                    width: parent.width - 2px;
+                    height: 13px;
+                    border-top-left-radius: 4px;
+                    border-top-right-radius: 4px;
+                    background: root.win-sidebar;
+                    Rectangle {
+                        x: 0px;
+                        y: parent.height - 1px;
+                        width: parent.width;
+                        height: 1px;
+                        background: root.win-border;
+                    }
+                    Rectangle { x: 6px; y: 5px; width: 28px; height: 3px; border-radius: 1.5px; background: root.win-ink.with-alpha(0.35); }
+                    Rectangle { x: parent.width - 22px; y: 5px; width: 3px; height: 3px; border-radius: 1.5px; background: root.win-ink.with-alpha(0.28); }
+                    Rectangle { x: parent.width - 15px; y: 5px; width: 3px; height: 3px; border-radius: 1.5px; background: root.win-ink.with-alpha(0.28); }
+                    Rectangle { x: parent.width - 8px; y: 5px; width: 3px; height: 3px; border-radius: 1.5px; background: root.win-ink.with-alpha(0.42); }
+                }
+
+                Rectangle {
+                    x: 1px;
+                    y: 14px;
+                    width: (parent.width - 2px) * 0.3;
+                    height: parent.height - 15px;
+                    border-bottom-left-radius: 4px;
+                    background: root.win-sidebar;
+                    Rectangle { x: parent.width - 1px; y: 0px; width: 1px; height: parent.height; background: root.win-border; }
+                    Rectangle { x: 5px; y: 6px; width: parent.width - 10px; height: 6px; border-radius: 2px; background: root.win-ink.with-alpha(0.14); }
+                    Rectangle { x: 5px; y: 16px; width: parent.width - 16px; height: 3px; border-radius: 1.5px; background: root.win-ink.with-alpha(0.18); }
+                    Rectangle { x: 5px; y: 23px; width: parent.width - 12px; height: 3px; border-radius: 1.5px; background: root.win-ink.with-alpha(0.12); }
+                }
+
+                Rectangle { x: parent.width * 0.3 + 8px; y: 20px; width: parent.width * 0.42; height: 4px; border-radius: 2px; background: root.win-ink.with-alpha(0.38); }
+                Rectangle { x: parent.width * 0.3 + 8px; y: 28px; width: parent.width * 0.56; height: 3px; border-radius: 1.5px; background: root.win-ink.with-alpha(0.16); }
+                Rectangle { x: parent.width * 0.3 + 8px; y: 37px; width: 22px; height: 8px; border-radius: 3px; background: root.accent-dot; }
+                Rectangle { x: parent.width * 0.3 + 34px; y: 37px; width: 20px; height: 8px; border-radius: 3px; background: root.win-ink.with-alpha(0.12); }
+            }
+
+            Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: parent.height - 16px;
+                width: Math.min(parent.width - 36px, 112px);
+                height: 10px;
+                border-radius: 4px;
+                background: root.dock-bg;
+                border-width: 1px;
+                border-color: root.win-border;
+
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 6px;
+                    VerticalLayout { alignment: center; Rectangle { width: 4px; height: 4px; border-radius: 1px; background: root.accent-dot; } }
+                    VerticalLayout { alignment: center; Rectangle { width: 4px; height: 4px; border-radius: 1px; background: root.win-ink.with-alpha(0.35); } }
+                    VerticalLayout { alignment: center; Rectangle { width: 4px; height: 4px; border-radius: 1px; background: root.win-ink.with-alpha(0.28); } }
+                    VerticalLayout { alignment: center; Rectangle { width: 4px; height: 4px; border-radius: 1px; background: root.win-ink.with-alpha(0.28); } }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            padding-left: 4px;
+            padding-right: 4px;
+            padding-bottom: 2px;
+            spacing: 8px;
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+                Text {
+                    text: root.name;
+                    color: SettingsTokens.text-primary;
+                    font-size: SettingsTokens.text-md;
+                    font-weight: 500;
+                }
+                Text {
+                    text: root.caption;
+                    color: SettingsTokens.text-muted;
+                    font-size: SettingsTokens.text-xs;
+                }
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 0;
+                alignment: center;
+                if root.selected: Rectangle {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    background: SettingsTokens.accent-subtle;
+                    Image {
+                        source: SettingsIcons.check;
+                        width: 12px;
+                        height: 12px;
+                        x: 3px;
+                        y: 3px;
+                        colorize: SettingsTokens.accent;
+                        image-fit: contain;
+                    }
+                }
+            }
+        }
+    }
+
+    card-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component ActionEditor inherits Rectangle {
+    in-out property <LauncherActionSetting> item;
+    callback edited(LauncherActionSetting);
+    callback move(int);
+    border-radius: SettingsTokens.radius-md;
+    background: SettingsTokens.bg-stage;
+    border-width: 1px;
+    border-color: SettingsTokens.border;
+    preferred-height: editor-body.preferred-height;
+    vertical-stretch: 0;
+
+    editor-body := VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+        HorizontalLayout {
+            spacing: 8px;
+            RixCheckBox {
+                text: @tr("Show");
+                checked: root.item.visible;
+                toggled => { root.item.visible = self.checked; root.edited(root.item); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            RixIconButton {
+                icon: SettingsIcons.arrow-up;
+                accessible-name: @tr("Move up");
+                clicked => { root.move(-1); }
+            }
+            RixIconButton {
+                icon: SettingsIcons.arrow-down;
+                accessible-name: @tr("Move down");
+                clicked => { root.move(1); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            LineEdit {
+                text: root.item.label;
+                placeholder-text: @tr("Label");
+                edited(value) => { root.item.label = value; root.edited(root.item); }
+            }
+            LineEdit {
+                text: root.item.icon;
+                placeholder-text: @tr("Icon name or SVG path");
+                edited(value) => { root.item.icon = value; root.edited(root.item); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 16px;
+            RixCheckBox {
+                text: @tr("Align right");
+                checked: root.item.end;
+                toggled => { root.item.end = self.checked; root.edited(root.item); }
+            }
+            RixCheckBox {
+                text: @tr("Icon only");
+                checked: root.item.icon-only;
+                toggled => { root.item.icon-only = self.checked; root.edited(root.item); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+    }
 }
 
 export component SettingsWindow inherits Window {
@@ -99,14 +300,22 @@ export component SettingsWindow inherits Window {
     preferred-height: root.initial-height;
     min-width: 900px;
     min-height: 600px;
-    default-font-family: Theme.font-family;
-    background: Theme.window-background;
+    default-font-family: SettingsTokens.font-sans;
+    background: SettingsTokens.bg-canvas;
 
     changed active-tab => {
+        content-scroll.viewport-y = 0px;
         SystemState.network-visible(root.active-tab == 8);
         root.active-tab-changed(root.active-tab);
     }
     callback active-tab-changed(int);
+
+    private property <length> wa-scroll: WindowAppearancePreferences.scroll-position;
+    changed wa-scroll => {
+        if root.active-tab == 17 {
+            content-scroll.viewport-y = root.wa-scroll;
+        }
+    }
 
     in property <[image]> navigation-icons: [];
     in-out property <[NavigationItem]> navigation-items: [];
@@ -117,7 +326,7 @@ export component SettingsWindow inherits Window {
     in-out property <string> active-theme-name: "FairyWren";
     in-out property <string> color-mode: "dark";
     callback select-theme-and-mode(string, string);
-    in property <bool> has-apply: root.active-tab == 0 || root.active-tab == 1 || root.active-tab == 4 || root.active-tab == 6 || root.active-tab == 7 || root.active-tab == 10 || root.active-tab == 11 || root.active-tab == 12 || root.active-tab == 14 || root.active-tab == 16 || root.active-tab == 17;
+    in property <bool> has-apply: root.active-tab == 0 || root.active-tab == 1 || root.active-tab == 2 || root.active-tab == 4 || root.active-tab == 6 || root.active-tab == 7 || root.active-tab == 10 || root.active-tab == 11 || root.active-tab == 12 || root.active-tab == 14 || root.active-tab == 16 || root.active-tab == 17;
 
     public function apply-current() {
         if root.active-tab == 0 {
@@ -127,8 +336,11 @@ export component SettingsWindow inherits Window {
             root.apply-icons-cursor(root.icon-themes[root.selected-icon-index], root.cursor-themes[root.selected-cursor-index], root.cursor-size);
         }
         if root.active-tab == 2 {
-            root.apply-display(root.display-width, root.display-height, root.display-hz, root.display-flipped);
-            OutputPreferences.apply();
+            if OutputPreferences.ready && OutputPreferences.native {
+                OutputPreferences.apply();
+            } else {
+                root.apply-display(root.display-width, root.display-height, root.display-hz, root.display-flipped);
+            }
         }
         if root.active-tab == 4 {
             root.apply-panel-launcher();
@@ -160,7 +372,7 @@ export component SettingsWindow inherits Window {
     in-out property <string> status-message: "";
     in-out property <bool> busy;
     in-out property <string> navigation-icon-theme;
-    in property <length> panel-form-width: (root.width - 250px - 64px - 14px - 18px) / 2 - 32px;
+    in property <length> panel-form-width: (root.width - 248px - 64px) / 2 - 24px;
 
     in-out property <int> blur-algorithm;
     in-out property <int> blur-iterations;
@@ -188,7 +400,7 @@ export component SettingsWindow inherits Window {
     in-out property <int> display-hz: 60;
     in-out property <bool> display-flipped: false;
 
-    in-out property <string> export-theme-name: "MyAeroTheme";
+    in-out property <string> export-theme-name: "MyRixTheme";
     in-out property <bool> export-include-panel: true;
     in-out property <bool> export-include-colors: true;
     in-out property <bool> export-include-icons: true;
@@ -228,7 +440,7 @@ export component SettingsWindow inherits Window {
     in-out property <int> launcher-height: 720;
     in-out property <string> launcher-icon: "start-here";
     in-out property <[LauncherActionSetting]> launcher-actions;
-    in-out property <length> panel-scroll-position;
+    in-out property <length> panel-scroll-position <=> content-scroll.viewport-y;
     callback edit-launcher-action(int, LauncherActionSetting);
     callback move-launcher-action(int, int);
 
@@ -254,52 +466,139 @@ export component SettingsWindow inherits Window {
     pure callback index-of-option([string], string) -> int;
 
     HorizontalLayout {
-        spacing: 0px; padding: 0px;
+        spacing: 0px;
+        padding: 0px;
 
         Rectangle {
-            width: 232px;
-            background: Theme.sidebar-background;
-            border-width: 0px;
+            width: 248px;
+            background: SettingsTokens.bg-sidebar;
+
             Rectangle {
-                x: parent.width - 1px; width: 1px; height: 100%;
-                background: Theme.border;
+                x: parent.width - 1px;
+                width: 1px;
+                height: 100%;
+                background: SettingsTokens.border;
             }
+
             VerticalLayout {
-                padding-top: 14px; padding-bottom: 14px; padding-left: 10px; padding-right: 10px; spacing: 8px;
-                Text { text: @tr("Settings"); color: Theme.text-primary; font-size: 19px; font-weight: 600; height: 36px; vertical-alignment: center; }
+                padding-top: 16px;
+                padding-bottom: 16px;
+                padding-left: 16px;
+                padding-right: 16px;
+                spacing: 12px;
+
                 HorizontalLayout {
-                    padding-bottom: 4px;
-                    search-box := LineEdit {
-                        placeholder-text: @tr("Search settings…");
-                        height: 32px;
-                        edited(query) => { root.search-changed(query); }
-                        accepted(query) => { root.search-accepted(query); }
+                    height: 32px;
+                    spacing: 8px;
+                    padding-left: 4px;
+                    alignment: start;
+
+                    VerticalLayout {
+                        alignment: center;
+                        Image {
+                            source: SettingsIcons.rix-mark;
+                            width: 18px;
+                            height: 18px;
+                            colorize: SettingsTokens.text-primary;
+                            image-fit: contain;
+                        }
+                    }
+
+                    Text {
+                        text: "RixDE";
+                        color: SettingsTokens.text-primary;
+                        font-size: SettingsTokens.text-lg;
+                        font-weight: 500;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: @tr("Settings");
+                        color: SettingsTokens.text-muted;
+                        font-size: SettingsTokens.text-lg;
+                        font-weight: 400;
+                        vertical-alignment: center;
                     }
                 }
+
+                search-box := LineEdit {
+                    leading-icon: SettingsIcons.search;
+                    has-icon: true;
+                    placeholder-text: @tr("Search");
+                    height: 34px;
+                    edited(query) => { root.search-changed(query); }
+                    accepted(query) => { root.search-accepted(query); }
+                }
+
                 ScrollArea {
-                    vertical-stretch: 1; content-height: nav-list.preferred-height;
+                    vertical-stretch: 1;
+                    gutter: 12px;
+                    content-height: nav-list.preferred-height;
                     nav-list := VerticalLayout {
-                        x: 0; y: 0; width: parent.content-width; height: self.preferred-height; spacing: 3px;
-                        for item in root.navigation-items: VerticalLayout {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.content-width - 4px;
+                        height: self.preferred-height;
+                        spacing: 2px;
+
+                        for item[nav-idx] in root.navigation-items: VerticalLayout {
                             spacing: 0px;
                             if item.is-first-in-section && item.section != "": VerticalLayout {
-                                padding-top: 14px;
-                                padding-bottom: 5px;
+                                padding-top: nav-idx == 0 ? 4px : 20px;
+                                padding-bottom: 6px;
                                 padding-left: 10px;
                                 Text {
                                     text: item.section;
-                                    font-size: 11px;
-                                    font-weight: 700;
-                                    color: Theme.text-muted;
+                                    font-size: SettingsTokens.text-xs;
+                                    font-weight: 500;
+                                    color: SettingsTokens.text-muted;
                                 }
                             }
                             Rectangle {
-                                height: 38px; border-radius: Theme.radius-sm;
-                                background: root.active-tab == item.tab-id ? Theme.surface-active : nav.has-hover ? Theme.overlay-idle : transparent;
-                                if root.active-tab == item.tab-id: Rectangle { x: 0; y: 6px; width: 3px; height: parent.height - 12px; border-radius: 2px; background: Theme.accent; }
-                                Image { x: 10px; y: (parent.height - self.height) / 2; width: Theme.icon-size; height: self.width; source: item.icon; image-fit: contain; }
-                                Text { x: 38px; width: parent.width - 46px; text: item.name; color: root.active-tab == item.tab-id ? Theme.text-primary : Theme.text-secondary; font-size: 13px; font-weight: root.active-tab == item.tab-id ? 600 : 400; vertical-alignment: center; height: parent.height; overflow: elide; }
+                                height: 34px;
+                                border-radius: SettingsTokens.radius-md;
+                                background: nav.has-hover && root.active-tab != item.tab-id ? SettingsTokens.bg-hover-subtle : transparent;
+                                animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
+
+                                Rectangle {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    border-radius: parent.border-radius;
+                                    background: SettingsTokens.is-light
+                                        ? @linear-gradient(180deg, #ffffff 0%, #f5f6f8 100%)
+                                        : (SettingsTokens.is-oled
+                                            ? @linear-gradient(180deg, #1d1e24 0%, #14151a 100%)
+                                            : @linear-gradient(180deg, #27292e 0%, #1f2125 100%));
+                                    border-width: 1px;
+                                    border-color: SettingsTokens.border-strong;
+                                    opacity: root.active-tab == item.tab-id ? 1.0 : 0.0;
+                                    animate opacity { duration: SettingsTokens.duration-fast; easing: ease-out; }
+                                }
+
+                                Image {
+                                    x: 10px;
+                                    y: (parent.height - self.height) / 2;
+                                    width: 16px;
+                                    height: 16px;
+                                    source: SettingsIcons.for-tab(item.tab-id);
+                                    colorize: root.active-tab == item.tab-id ? SettingsTokens.text-primary : SettingsTokens.text-muted;
+                                    image-fit: contain;
+                                }
+
+                                Text {
+                                    x: 36px;
+                                    width: parent.width - 44px;
+                                    text: item.name;
+                                    color: root.active-tab == item.tab-id ? SettingsTokens.text-primary : SettingsTokens.text-secondary;
+                                    font-size: SettingsTokens.text-md;
+                                    font-weight: root.active-tab == item.tab-id ? 500 : 400;
+                                    vertical-alignment: center;
+                                    height: parent.height;
+                                    overflow: elide;
+                                }
+
                                 nav := TouchArea {
+                                    mouse-cursor: pointer;
                                     clicked => {
                                         root.active-tab = item.tab-id;
                                         root.active-tab-title = item.name;
@@ -315,140 +614,220 @@ export component SettingsWindow inherits Window {
 
         VerticalLayout {
             horizontal-stretch: 1;
+            spacing: 0px;
 
-            HorizontalLayout {
-                height: 50px;
-                padding-left: 32px;
-                padding-right: 32px;
-                alignment: start;
+            Rectangle {
+                height: 56px;
                 vertical-stretch: 0;
+                background: SettingsTokens.bg-canvas;
 
                 HorizontalLayout {
-                    alignment: center;
+                    padding-left: 32px;
+                    padding-right: 32px;
                     spacing: 8px;
-                    Text {
-                        text: root.active-tab-section != "" ? root.active-tab-section : @tr("Settings");
-                        color: Theme.text-muted;
-                        font-size: 12.5px;
-                        font-weight: 500;
-                        vertical-alignment: center;
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+
+                        VerticalLayout {
+                            alignment: center;
+                            Image {
+                                source: SettingsIcons.for-tab(root.active-tab);
+                                width: 16px;
+                                height: 16px;
+                                colorize: SettingsTokens.text-muted;
+                                image-fit: contain;
+                            }
+                        }
+
+                        Text {
+                            text: root.active-tab-section != "" ? root.active-tab-section : @tr("Settings");
+                            color: SettingsTokens.text-muted;
+                            font-size: SettingsTokens.text-sm;
+                            font-weight: 400;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: "/";
+                            color: SettingsTokens.text-muted;
+                            font-size: SettingsTokens.text-sm;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: root.active-tab-title != "" ? root.active-tab-title : @tr("Appearance");
+                            color: SettingsTokens.text-primary;
+                            font-weight: 500;
+                            font-size: SettingsTokens.text-sm;
+                            vertical-alignment: center;
+                        }
                     }
-                    Text {
-                        text: "/";
-                        color: Theme.text-muted;
-                        font-size: 12.5px;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: root.active-tab-title != "" ? root.active-tab-title : @tr("General");
-                        color: Theme.text-secondary;
-                        font-weight: 600;
-                        font-size: 12.5px;
-                        vertical-alignment: center;
-                    }
+
+                    Rectangle { horizontal-stretch: 1; }
                 }
             }
 
-            Rectangle { height: 1px; background: Theme.divider; vertical-stretch: 0; }
+            Rectangle { height: 1px; background: SettingsTokens.border; vertical-stretch: 0; }
 
-            content-scroll := ScrollView {
-                mouse-drag-pan-enabled: false;
+            content-scroll := ScrollArea {
                 vertical-stretch: 1;
+                content-height: page-stack.preferred-height;
 
-                HorizontalLayout {
-                    width: content-scroll.width;
-                    alignment: center;
-                    padding-top: 26px;
-                    padding-bottom: 36px;
-                    padding-left: 32px;
-                    padding-right: 32px;
+                Rectangle {
+                    x: (content-scroll.content-width - self.width) / 2;
+                    y: 0px;
+                    width: Math.min(864px, Math.max(0px, content-scroll.content-width - 64px));
+                    height: page-stack.preferred-height;
+                    background: transparent;
 
-                    Rectangle {
-                        width: Math.min(960px, content-scroll.width - 48px);
-                        background: transparent;
-
-                        VerticalLayout {
-                            spacing: 18px;
+                    page-stack := VerticalLayout {
+                        alignment: start;
+                        padding-top: 24px;
+                        padding-bottom: 32px;
+                        spacing: 16px;
 
                             VerticalLayout {
+                                alignment: start;
                                 spacing: 4px;
-                                padding-bottom: 4px;
-                                Heading {
-                                    font-size: 22px;
-                                    font-weight: 600;
+                                padding-bottom: 8px;
+                                Text {
+                                    font-size: SettingsTokens.text-title;
+                                    font-weight: 500;
+                                    color: SettingsTokens.text-primary;
                                     text: root.active-tab-title != "" ? root.active-tab-title : @tr("Settings");
                                 }
                                 if root.active-tab-description != "": Text {
                                     text: root.active-tab-description;
-                                    color: Theme.text-secondary;
-                                    font-size: 13px;
+                                    color: SettingsTokens.text-secondary;
+                                    font-size: SettingsTokens.text-md;
+                                    font-weight: 400;
                                     wrap: word-wrap;
                                 }
                             }
 
                             if root.active-tab == 13: VerticalLayout {
+                                alignment: start;
                                 spacing: 16px;
                                 SettingsCard {
-                                    title: "RixDE";
-                                    subtitle: @tr("Next-generation Wayland Desktop Environment");
+                                    HorizontalLayout {
+                                        spacing: 16px;
+                                        padding-top: 4px;
+                                        padding-bottom: 4px;
+                                        Rectangle {
+                                            width: 44px;
+                                            height: 44px;
+                                            border-radius: SettingsTokens.radius-md;
+                                            background: SettingsTokens.bg-raised;
+                                            border-width: 1px;
+                                            border-color: SettingsTokens.border-strong;
+                                            Image {
+                                                source: SettingsIcons.rix-mark;
+                                                width: 22px;
+                                                height: 22px;
+                                                x: 11px;
+                                                y: 11px;
+                                                colorize: SettingsTokens.text-primary;
+                                                image-fit: contain;
+                                            }
+                                        }
+                                        VerticalLayout {
+                                            alignment: center;
+                                            spacing: 2px;
+                                            horizontal-stretch: 1;
+                                            Text {
+                                                text: "RixDE";
+                                                font-size: 18px;
+                                                font-weight: 500;
+                                                color: SettingsTokens.text-primary;
+                                            }
+                                            Text {
+                                                text: @tr("Wayland desktop environment built with Rust and Slint");
+                                                font-size: SettingsTokens.text-sm;
+                                                color: SettingsTokens.text-secondary;
+                                                wrap: word-wrap;
+                                            }
+                                        }
+                                    }
+
+                                    SettingsDivider {}
+
                                     SettingsRow {
                                         title: @tr("Version");
-                                        Text { text: root.version; color: Theme.text-primary; font-weight: 600; font-size: 14px; }
+                                        Text {
+                                            text: root.version != "" ? root.version : "0.1.0";
+                                            font-family: SettingsTokens.font-mono;
+                                            color: SettingsTokens.text-primary;
+                                            font-weight: 500;
+                                            font-size: SettingsTokens.text-sm;
+                                        }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
-                                        title: @tr("Session: Wayland");
-                                        Text { text: "Smithay DRM / Wayland"; color: Theme.text-secondary; font-size: 13px; }
+                                        title: @tr("Compositor");
+                                        Text {
+                                            text: "Smithay · DRM / Wayland";
+                                            font-family: SettingsTokens.font-mono;
+                                            color: SettingsTokens.text-secondary;
+                                            font-size: SettingsTokens.text-sm;
+                                        }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
-                                        title: @tr("License: MIT / Apache-2.0");
-                                        Text { text: "Open Source"; color: Theme.text-muted; font-size: 13px; }
+                                        title: @tr("Interface toolkit");
+                                        Text {
+                                            text: "Slint";
+                                            font-family: SettingsTokens.font-mono;
+                                            color: SettingsTokens.text-secondary;
+                                            font-size: SettingsTokens.text-sm;
+                                        }
+                                    }
+                                    SettingsDivider {}
+                                    SettingsRow {
+                                        title: @tr("License");
+                                        Text {
+                                            text: "MIT / Apache-2.0";
+                                            font-family: SettingsTokens.font-mono;
+                                            color: SettingsTokens.text-secondary;
+                                            font-size: SettingsTokens.text-sm;
+                                        }
                                     }
                                 }
                             }
 
                             if root.active-tab == 14: LanguageView {}
-
                             if root.active-tab == 16: PowerView { busy: root.busy; }
-
                             if root.active-tab == 17: WindowAppearanceView { busy: root.busy; }
-
                             if root.active-tab == 18: ClavisView {}
-
                             if root.active-tab == 15: DefaultAppsView {}
-
                             if root.active-tab == 12: PluginsView {}
-
                             if root.active-tab == 11: WallpaperView {}
-
                             if root.active-tab == 10: BehaviorView {}
-
                             if root.active-tab == 6: KeyboardSettingsView {}
 
                             if root.active-tab == 7: VerticalLayout {
+                                alignment: start;
                                 spacing: 16px;
                                 SettingsCard {
                                     title: @tr("Volume amplification");
-                                    subtitle: @tr("Software volume boost for quiet audio devices");
                                     SettingsRow {
                                         title: @tr("Allow volume boost up to 150%");
-                                        subtitle: @tr("Enables volume past 100% on the volume slider and hotkeys");
+                                        subtitle: @tr("Extend volume sliders and media keys past 100%");
                                         ToggleSwitch { checked <=> BehaviorSettings.amplified; }
                                     }
                                 }
                                 SettingsCard {
-                                    title: @tr("Audio devices and volume");
-                                    subtitle: @tr("Output devices, microphones and volume levels");
+                                    title: @tr("Audio devices");
                                     AudioView { full-mode: true; }
                                 }
                             }
 
                             if root.active-tab == 8: VerticalLayout {
+                                alignment: start;
                                 spacing: 16px;
                                 SettingsCard {
-                                    title: @tr("Network and Internet");
-                                    subtitle: @tr("Wi-Fi connections, wired ethernet and saved profiles");
+                                    title: @tr("Network and internet");
                                     NetworkView { full-mode: true; }
                                 }
                             }
@@ -456,206 +835,67 @@ export component SettingsWindow inherits Window {
                             if root.active-tab == 9: AutostartView {}
 
                             if root.active-tab == 0: VerticalLayout {
+                                alignment: start;
                                 spacing: 16px;
+
                                 SettingsCard {
                                     title: @tr("Desktop themes");
-                                    subtitle: @tr("Select a desktop style and customize its color mode");
+                                    subtitle: @tr("Choose a desktop visual profile and color mode");
 
                                     HorizontalLayout {
                                         spacing: 12px;
 
-                                        Rectangle {
-                                            horizontal-stretch: 1;
-                                            border-radius: Theme.radius-md;
-                                            background: root.selected-theme == "fairywren" ? Theme.accent.with-alpha(0.08) : Theme.control-surface;
-                                            border-width: root.selected-theme == "fairywren" ? 2px : 1px;
-                                            border-color: root.selected-theme == "fairywren" ? Theme.accent : Theme.control-border;
-                                            preferred-height: 110px;
-
-                                            VerticalLayout {
-                                                padding: 10px;
-                                                spacing: 8px;
-
-                                                Rectangle {
-                                                    height: 64px;
-                                                    border-radius: 6px;
-                                                    background: root.color-mode == "light" ? #e2e8f0 : (root.color-mode == "oled" ? #050508 : #12151b);
-                                                    border-width: 1px;
-                                                    border-color: #ffffff.with-alpha(0.08);
-                                                    clip: true;
-
-                                                    Rectangle {
-                                                        x: 8px; y: 8px;
-                                                        width: 70%;
-                                                        height: 38px;
-                                                        border-radius: 4px;
-                                                        background: root.color-mode == "light" ? #0f172a.with-alpha(0.08) : #ffffff.with-alpha(0.12);
-                                                        border-width: 1px;
-                                                        border-color: root.color-mode == "light" ? #0f172a.with-alpha(0.15) : #ffffff.with-alpha(0.15);
-
-                                                        HorizontalLayout {
-                                                            x: 5px; y: 5px;
-                                                            spacing: 4px;
-                                                            alignment: start;
-                                                            Rectangle { width: 5px; height: 5px; border-radius: 2.5px; background: Theme.accent; }
-                                                            Rectangle { width: 5px; height: 5px; border-radius: 2.5px; background: Theme.accent.with-alpha(0.5); }
-                                                        }
-                                                    }
-                                                }
-
-                                                HorizontalLayout {
-                                                    VerticalLayout {
-                                                        horizontal-stretch: 1;
-                                                        alignment: center;
-                                                        Text {
-                                                            text: "FairyWren";
-                                                            color: Theme.text-primary;
-                                                            font-size: 13px;
-                                                            font-weight: 500;
-                                                        }
-                                                    }
-                                                    TagBadge {
-                                                        text: @tr("Default");
-                                                        success: root.selected-theme == "fairywren";
-                                                    }
-                                                }
-                                            }
-
-                                            TouchArea {
-                                                clicked => {
-                                                    root.selected-theme = "fairywren";
-                                                    root.select-theme-and-mode(root.selected-theme, root.color-mode);
-                                                }
+                                        ThemePreviewCard {
+                                            name: "FairyWren";
+                                            caption: @tr("Frosted glass");
+                                            selected: root.selected-theme == "fairywren";
+                                            sky-top: root.color-mode == "light" ? #d9e3f0 : (root.color-mode == "oled" ? #04060a : #172030);
+                                            sky-bottom: root.color-mode == "light" ? #edf2f8 : (root.color-mode == "oled" ? #0c121c : #222e42);
+                                            win-bg: root.color-mode == "light" ? #ffffffeb : (root.color-mode == "oled" ? #0e1015eb : #1d2028eb);
+                                            win-sidebar: root.color-mode == "light" ? #f1f4f9eb : (root.color-mode == "oled" ? #08090ceb : #16181feb);
+                                            win-border: root.color-mode == "light" ? #d4dbe5 : (root.color-mode == "oled" ? #1f222b : #2d3240);
+                                            win-ink: root.color-mode == "light" ? #16181c : #ededef;
+                                            dock-bg: root.color-mode == "light" ? #ffffffd8 : (root.color-mode == "oled" ? #101218e6 : #1b1e26e0);
+                                            accent-dot: Theme.accent;
+                                            clicked => {
+                                                root.selected-theme = "fairywren";
+                                                root.select-theme-and-mode(root.selected-theme, root.color-mode);
                                             }
                                         }
 
-                                        Rectangle {
-                                            horizontal-stretch: 1;
-                                            border-radius: Theme.radius-md;
-                                            background: root.selected-theme == "crisp" ? Theme.accent.with-alpha(0.08) : Theme.control-surface;
-                                            border-width: root.selected-theme == "crisp" ? 2px : 1px;
-                                            border-color: root.selected-theme == "crisp" ? Theme.accent : Theme.control-border;
-                                            preferred-height: 110px;
-
-                                            VerticalLayout {
-                                                padding: 10px;
-                                                spacing: 8px;
-
-                                                Rectangle {
-                                                    height: 64px;
-                                                    border-radius: 6px;
-                                                    background: root.color-mode == "light" ? #f1f5f9 : (root.color-mode == "oled" ? #0a0a0e : #1e2536);
-                                                    border-width: 1px;
-                                                    border-color: #ffffff.with-alpha(0.08);
-                                                    clip: true;
-
-                                                    Rectangle {
-                                                        x: 8px; y: 8px;
-                                                        width: 70%;
-                                                        height: 38px;
-                                                        border-radius: 4px;
-                                                        background: root.color-mode == "light" ? #0f172a.with-alpha(0.08) : #ffffff.with-alpha(0.12);
-                                                        border-width: 1px;
-                                                        border-color: root.color-mode == "light" ? #0f172a.with-alpha(0.15) : #ffffff.with-alpha(0.15);
-
-                                                        HorizontalLayout {
-                                                            x: 5px; y: 5px;
-                                                            spacing: 4px;
-                                                            alignment: start;
-                                                            Rectangle { width: 5px; height: 5px; border-radius: 2.5px; background: #0284c7; }
-                                                            Rectangle { width: 5px; height: 5px; border-radius: 2.5px; background: #0284c7.with-alpha(0.5); }
-                                                        }
-                                                    }
-                                                }
-
-                                                HorizontalLayout {
-                                                    VerticalLayout {
-                                                        horizontal-stretch: 1;
-                                                        alignment: center;
-                                                        Text {
-                                                            text: "Crisp";
-                                                            color: Theme.text-primary;
-                                                            font-size: 13px;
-                                                            font-weight: 500;
-                                                        }
-                                                    }
-                                                    TagBadge {
-                                                        text: @tr("Clean");
-                                                        success: root.selected-theme == "crisp";
-                                                    }
-                                                }
-                                            }
-
-                                            TouchArea {
-                                                clicked => {
-                                                    root.selected-theme = "crisp";
-                                                    root.select-theme-and-mode(root.selected-theme, root.color-mode);
-                                                }
+                                        ThemePreviewCard {
+                                            name: "Crisp";
+                                            caption: @tr("Balanced matte");
+                                            selected: root.selected-theme == "crisp";
+                                            sky-top: root.color-mode == "light" ? #e6ebf2 : (root.color-mode == "oled" ? #050608 : #181c24);
+                                            sky-bottom: root.color-mode == "light" ? #f4f6fa : (root.color-mode == "oled" ? #0f1218 : #232833);
+                                            win-bg: root.color-mode == "light" ? #ffffff : (root.color-mode == "oled" ? #0d0e11 : #1c1f26);
+                                            win-sidebar: root.color-mode == "light" ? #f2f4f8 : (root.color-mode == "oled" ? #060709 : #14171d);
+                                            win-border: root.color-mode == "light" ? #d7dce4 : (root.color-mode == "oled" ? #1e2026 : #2d313b);
+                                            win-ink: root.color-mode == "light" ? #16181c : #ededef;
+                                            dock-bg: root.color-mode == "light" ? #ffffffee : (root.color-mode == "oled" ? #111317 : #1a1d24);
+                                            accent-dot: #2563eb;
+                                            clicked => {
+                                                root.selected-theme = "crisp";
+                                                root.select-theme-and-mode(root.selected-theme, root.color-mode);
                                             }
                                         }
 
-                                        Rectangle {
-                                            horizontal-stretch: 1;
-                                            border-radius: Theme.radius-md;
-                                            background: root.selected-theme == "cyber" ? Theme.accent.with-alpha(0.08) : Theme.control-surface;
-                                            border-width: root.selected-theme == "cyber" ? 2px : 1px;
-                                            border-color: root.selected-theme == "cyber" ? Theme.accent : Theme.control-border;
-                                            preferred-height: 110px;
-
-                                            VerticalLayout {
-                                                padding: 10px;
-                                                spacing: 8px;
-
-                                                Rectangle {
-                                                    height: 64px;
-                                                    border-radius: 6px;
-                                                    background: root.color-mode == "light" ? #eef2ff : (root.color-mode == "oled" ? #000000 : #090a0f);
-                                                    border-width: 1px;
-                                                    border-color: #ffffff.with-alpha(0.08);
-                                                    clip: true;
-
-                                                    Rectangle {
-                                                        x: 8px; y: 8px;
-                                                        width: 70%;
-                                                        height: 38px;
-                                                        border-radius: 4px;
-                                                        background: root.color-mode == "light" ? #0f172a.with-alpha(0.08) : #ffffff.with-alpha(0.1);
-                                                        border-width: 1px;
-                                                        border-color: root.color-mode == "light" ? #0f172a.with-alpha(0.12) : #ffffff.with-alpha(0.12);
-
-                                                        HorizontalLayout {
-                                                            x: 5px; y: 5px;
-                                                            spacing: 4px;
-                                                            alignment: start;
-                                                            Rectangle { width: 5px; height: 5px; border-radius: 2.5px; background: #a855f7; }
-                                                            Rectangle { width: 5px; height: 5px; border-radius: 2.5px; background: #a855f7.with-alpha(0.5); }
-                                                        }
-                                                    }
-                                                }
-
-                                                HorizontalLayout {
-                                                    VerticalLayout {
-                                                        horizontal-stretch: 1;
-                                                        alignment: center;
-                                                        Text {
-                                                            text: "Cyber";
-                                                            color: Theme.text-primary;
-                                                            font-size: 13px;
-                                                            font-weight: 500;
-                                                        }
-                                                    }
-                                                    TagBadge {
-                                                        text: @tr("Modern");
-                                                        success: root.selected-theme == "cyber";
-                                                    }
-                                                }
-                                            }
-
-                                            TouchArea {
-                                                clicked => {
-                                                    root.selected-theme = "cyber";
-                                                    root.select-theme-and-mode(root.selected-theme, root.color-mode);
-                                                }
+                                        ThemePreviewCard {
+                                            name: "Cyber";
+                                            caption: @tr("Deep contrast");
+                                            selected: root.selected-theme == "cyber";
+                                            sky-top: root.color-mode == "light" ? #e5e4f2 : (root.color-mode == "oled" ? #000000 : #13111c);
+                                            sky-bottom: root.color-mode == "light" ? #f2f1f9 : (root.color-mode == "oled" ? #0b0912 : #1e1a2b);
+                                            win-bg: root.color-mode == "light" ? #fdfcff : (root.color-mode == "oled" ? #09080d : #171520);
+                                            win-sidebar: root.color-mode == "light" ? #f1eff8 : (root.color-mode == "oled" ? #040306 : #100e17);
+                                            win-border: root.color-mode == "light" ? #dad7e6 : (root.color-mode == "oled" ? #1c1926 : #2a2638);
+                                            win-ink: root.color-mode == "light" ? #16181c : #ededef;
+                                            dock-bg: root.color-mode == "light" ? #ffffffeb : (root.color-mode == "oled" ? #0c0a12 : #15131e);
+                                            accent-dot: #8b5cf6;
+                                            clicked => {
+                                                root.selected-theme = "cyber";
+                                                root.select-theme-and-mode(root.selected-theme, root.color-mode);
                                             }
                                         }
                                     }
@@ -664,35 +904,13 @@ export component SettingsWindow inherits Window {
 
                                     SettingsRow {
                                         title: @tr("Color mode");
-                                        subtitle: @tr("Choose white, black, or OLED color palette for the selected theme");
-
-                                        HorizontalLayout {
-                                            spacing: 8px;
-                                            alignment: center;
-
-                                            RixButton {
-                                                text: @tr("White");
-                                                primary: root.color-mode == "light";
-                                                clicked => {
-                                                    root.color-mode = "light";
-                                                    root.select-theme-and-mode(root.selected-theme, root.color-mode);
-                                                }
-                                            }
-                                            RixButton {
-                                                text: @tr("Black");
-                                                primary: root.color-mode == "dark";
-                                                clicked => {
-                                                    root.color-mode = "dark";
-                                                    root.select-theme-and-mode(root.selected-theme, root.color-mode);
-                                                }
-                                            }
-                                            RixButton {
-                                                text: "OLED";
-                                                primary: root.color-mode == "oled";
-                                                clicked => {
-                                                    root.color-mode = "oled";
-                                                    root.select-theme-and-mode(root.selected-theme, root.color-mode);
-                                                }
+                                        subtitle: @tr("Light, dark or true-black OLED palette");
+                                        SegmentedControl {
+                                            options: [@tr("Light"), @tr("Dark"), "OLED"];
+                                            current-index: root.color-mode == "light" ? 0 : (root.color-mode == "oled" ? 2 : 1);
+                                            selected(idx) => {
+                                                root.color-mode = idx == 0 ? "light" : (idx == 2 ? "oled" : "dark");
+                                                root.select-theme-and-mode(root.selected-theme, root.color-mode);
                                             }
                                         }
                                     }
@@ -700,18 +918,20 @@ export component SettingsWindow inherits Window {
 
                                 SettingsCard {
                                     title: @tr("Translucency and blur");
-                                    subtitle: @tr("Configure frosted glass blur effect behind windows, menus and panels");
+                                    subtitle: @tr("Compositor backdrop blur behind panels, menus and window frames");
+
                                     SettingsRow {
                                         title: @tr("Background blur");
-                                        subtitle: @tr("Enable frosted glass blur effect behind windows and panels");
+                                        subtitle: @tr("Enable frosted glass shaders behind translucent surfaces");
                                         ToggleSwitch { checked <=> root.is-aero; }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Surface opacity");
-                                        subtitle: @tr("Adjust opacity of desktop panels, menus and window frames");
+                                        subtitle: @tr("Opacity of desktop panels, menus and overlays");
                                         HorizontalLayout {
-                                            spacing: 10px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             Slider { value <=> root.panel-opacity; minimum: 0; maximum: 1; min-width: 160px; }
                                             ValueBadge { text: round(root.panel-opacity * 100) + "%"; }
                                         }
@@ -719,21 +939,25 @@ export component SettingsWindow inherits Window {
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Blur algorithm");
-                                        subtitle: @tr("Select compositor blur shader technique");
-                                        ComboBox { model: ["Dual Kawase", "Gaussian"]; current-index <=> root.blur-algorithm; min-width: 195px; }
+                                        ComboBox {
+                                            model: ["Dual Kawase", "Gaussian"];
+                                            current-index <=> root.blur-algorithm;
+                                            min-width: 208px;
+                                        }
                                     }
                                     if root.blur-algorithm == 0: SettingsDivider {}
                                     if root.blur-algorithm == 0: SettingsRow {
                                         title: @tr("Blur passes");
-                                        subtitle: @tr("Number of downsample and upsample blur iterations");
-                                        RixSpinBox { value <=> root.blur-iterations; minimum: 1; maximum: 6; suffix: @tr(" passes"); }
+                                        subtitle: @tr("Downsample and upsample shader iterations");
+                                        RixSpinBox { value <=> root.blur-iterations; minimum: 1; maximum: 6; suffix: @tr(" passes"); readout-min-width: 84px; }
                                     }
                                     if root.blur-algorithm == 0: SettingsDivider {}
                                     if root.blur-algorithm == 0: SettingsRow {
                                         title: @tr("Blur offset");
-                                        subtitle: @tr("Spread radius between blur filter sample points");
+                                        subtitle: @tr("Sample spread radius between blur filter passes");
                                         HorizontalLayout {
-                                            spacing: 10px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             Slider { value <=> root.blur-offset; minimum: 0; maximum: 16; min-width: 160px; }
                                             ValueBadge { text: round(root.blur-offset * 10) / 10; }
                                         }
@@ -741,9 +965,10 @@ export component SettingsWindow inherits Window {
                                     if root.blur-algorithm == 1: SettingsDivider {}
                                     if root.blur-algorithm == 1: SettingsRow {
                                         title: @tr("Blur radius");
-                                        subtitle: @tr("Gaussian blur kernel size in pixels");
+                                        subtitle: @tr("Gaussian kernel size in pixels");
                                         HorizontalLayout {
-                                            spacing: 10px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             Slider { value <=> root.blur-radius; minimum: 1; maximum: 128; min-width: 160px; }
                                             ValueBadge { text: round(root.blur-radius) + " px"; }
                                         }
@@ -751,29 +976,30 @@ export component SettingsWindow inherits Window {
                                     if root.blur-algorithm == 1: SettingsDivider {}
                                     if root.blur-algorithm == 1: SettingsRow {
                                         title: @tr("Downsampling");
-                                        subtitle: @tr("Scale factor before applying the blur filter");
+                                        subtitle: @tr("Scale reduction before applying Gaussian blur");
                                         RixSpinBox { value <=> root.gaussian-downsample; minimum: 1; maximum: 4; suffix: "x"; }
                                     }
                                 }
 
                                 SettingsCard {
                                     title: @tr("Noise and texture");
-                                    subtitle: @tr("Procedural grain texture overlaid on translucent surfaces");
+                                    subtitle: @tr("Subtle grain overlaid on glass surfaces to prevent banding");
+
                                     SettingsRow {
                                         title: @tr("Noise intensity");
-                                        subtitle: @tr("Subtle grain applied over frosted glass to reduce color banding");
                                         HorizontalLayout {
-                                            spacing: 10px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             Slider { value <=> root.noise-opacity; minimum: 0; maximum: 0.5; min-width: 160px; }
-                                            ValueBadge { text: round(root.noise-opacity * 255) + " / 255"; }
+                                            ValueBadge { readout-width: 68px; text: round(root.noise-opacity * 255) + "/255"; }
                                         }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Grain size");
-                                        subtitle: @tr("Scale of the procedural noise texture");
                                         HorizontalLayout {
-                                            spacing: 10px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             Slider { value <=> root.noise-scale; minimum: 0.25; maximum: 8; min-width: 160px; }
                                             ValueBadge { text: round(root.noise-scale * 10) / 10; }
                                         }
@@ -781,9 +1007,10 @@ export component SettingsWindow inherits Window {
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Grain bias");
-                                        subtitle: @tr("Brightness balance of noise grain (0 is neutral, 0.5 is balanced)");
+                                        subtitle: @tr("Brightness balance (0 neutral, 0.5 centered)");
                                         HorizontalLayout {
-                                            spacing: 10px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             Slider { value <=> root.noise-bias; minimum: 0; maximum: 1; min-width: 160px; }
                                             ValueBadge { text: round(root.noise-bias * 100) / 100; }
                                         }
@@ -791,50 +1018,72 @@ export component SettingsWindow inherits Window {
                                 }
 
                                 SettingsCard {
-                                    title: @tr("Color correction and accent");
-                                    subtitle: @tr("Accent palette highlights and color correction applied through glass");
+                                    title: @tr("Accent and color correction");
+
                                     SettingsRow {
-                                        title: @tr("Accent palette");
-                                        subtitle: @tr("Choose from recommended accents or pick a custom color");
+                                        title: @tr("Accent color");
+                                        subtitle: @tr("Highlight color for active controls and selections");
                                         HorizontalLayout {
-                                            spacing: 8px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             for opt in [
                                                 { brush: #38bdf8, hex: "#38bdf8" },
-                                                { brush: #a855f7, hex: "#a855f7" },
-                                                { brush: #f43f5e, hex: "#f43f5e" },
+                                                { brush: #2563eb, hex: "#2563eb" },
+                                                { brush: #5271ff, hex: "#5271ff" },
+                                                { brush: #8b5cf6, hex: "#8b5cf6" },
+                                                { brush: #e11d48, hex: "#e11d48" },
                                                 { brush: #10b981, hex: "#10b981" },
-                                                { brush: #f59e0b, hex: "#f59e0b" },
-                                                { brush: #6366f1, hex: "#6366f1" },
-                                                { brush: #06b6d4, hex: "#06b6d4" },
+                                                { brush: #d97706, hex: "#d97706" },
                                                 { brush: #64748b, hex: "#64748b" },
                                             ]: Rectangle {
-                                                width: 24px; height: 24px; border-radius: 12px;
+                                                width: 24px;
+                                                height: 24px;
+                                                border-radius: 12px;
                                                 background: opt.brush;
-                                                border-width: root.accent-color == opt.hex ? 2.5px : 1px;
-                                                border-color: root.accent-color == opt.hex ? Theme.text-primary : Theme.border;
-                                                TouchArea { clicked => { root.accent-color = opt.hex; } }
+                                                border-width: root.accent-color == opt.hex ? 2px : 1px;
+                                                border-color: root.accent-color == opt.hex ? SettingsTokens.text-primary : SettingsTokens.border-strong;
+                                                animate border-color { duration: SettingsTokens.duration-fast; easing: ease-out; }
+                                                TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => { root.accent-color = opt.hex; }
+                                                }
                                             }
                                         }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
-                                        title: @tr("Custom accent color");
-                                        subtitle: root.accent-color;
+                                        title: @tr("Custom accent");
                                         HorizontalLayout {
-                                            spacing: 10px; alignment: center;
+                                            spacing: 10px;
+                                            alignment: center;
                                             Rectangle {
-                                                width: 22px; height: 22px; border-radius: 11px;
-                                                background: Theme.accent; border-width: 1px; border-color: Theme.border;
+                                                width: 20px;
+                                                height: 20px;
+                                                border-radius: 10px;
+                                                background: Theme.accent;
+                                                border-width: 1px;
+                                                border-color: SettingsTokens.border-strong;
                                             }
-                                            Button { text: @tr("Choose color…"); clicked => { root.choose-color(-1, root.accent-color); } }
+                                            Text {
+                                                text: root.accent-color;
+                                                font-family: SettingsTokens.font-mono;
+                                                font-size: SettingsTokens.text-sm;
+                                                color: SettingsTokens.text-secondary;
+                                                vertical-alignment: center;
+                                            }
+                                            RixButton {
+                                                text: @tr("Choose color");
+                                                clicked => { root.choose-color(-1, root.accent-color); }
+                                            }
                                         }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Brightness");
-                                        subtitle: @tr("Adjust brightness of background scenes behind glass");
+                                        subtitle: @tr("Luminance of content visible behind glass");
                                         HorizontalLayout {
-                                            spacing: 10px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             Slider { value <=> root.material-brightness; minimum: 0; maximum: 2; min-width: 160px; }
                                             ValueBadge { text: round(root.material-brightness * 100) + "%"; }
                                         }
@@ -842,9 +1091,10 @@ export component SettingsWindow inherits Window {
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Contrast");
-                                        subtitle: @tr("Adjust contrast under translucent surfaces");
+                                        subtitle: @tr("Contrast adjustment through translucent surfaces");
                                         HorizontalLayout {
-                                            spacing: 10px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             Slider { value <=> root.material-contrast; minimum: 0; maximum: 2; min-width: 160px; }
                                             ValueBadge { text: round(root.material-contrast * 100) + "%"; }
                                         }
@@ -852,9 +1102,10 @@ export component SettingsWindow inherits Window {
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Saturation");
-                                        subtitle: @tr("Vibrancy of colors visible through glass");
+                                        subtitle: @tr("Color intensity visible behind glass");
                                         HorizontalLayout {
-                                            spacing: 10px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             Slider { value <=> root.material-saturation; minimum: 0; maximum: 2; min-width: 160px; }
                                             ValueBadge { text: round(root.material-saturation * 100) + "%"; }
                                         }
@@ -863,112 +1114,58 @@ export component SettingsWindow inherits Window {
                             }
 
                             if root.active-tab == 1: VerticalLayout {
+                                alignment: start;
                                 spacing: 16px;
                                 SettingsCard {
-                                    title: @tr("Icons and mouse pointer");
-                                    subtitle: @tr("Choose system icon set, pointer theme and cursor size");
+                                    title: @tr("Icons and pointer");
                                     SettingsRow {
                                         title: @tr("Icon theme");
-                                        subtitle: @tr("Theme applied to applications, folders and system dialogs");
-                                        ComboBox { model: root.icon-themes; current-index <=> root.selected-icon-index; min-width: 200px; }
+                                        subtitle: @tr("Applied to applications, folders and file dialogs");
+                                        ComboBox { model: root.icon-themes; current-index <=> root.selected-icon-index; min-width: 208px; }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Cursor theme");
-                                        subtitle: @tr("Mouse pointer style and animations");
-                                        ComboBox { model: root.cursor-themes; current-index <=> root.selected-cursor-index; min-width: 200px; }
+                                        ComboBox { model: root.cursor-themes; current-index <=> root.selected-cursor-index; min-width: 208px; }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Cursor size");
-                                        subtitle: @tr("Size of the pointer in pixels (default: 24)");
+                                        subtitle: @tr("Pointer size in pixels (default 24)");
                                         RixSpinBox { value <=> root.cursor-size; minimum: 16; maximum: 96; step: 4; suffix: " px"; }
                                     }
                                 }
                             }
 
                             if root.active-tab == 2: VerticalLayout {
+                                alignment: start;
                                 spacing: 16px;
                                 DisplayView {}
                                 if OutputPreferences.ready && !OutputPreferences.native: SettingsCard {
                                     title: @tr("Nested window display");
-                                    subtitle: @tr("Configure window resolution, refresh rate and display orientation");
+                                    subtitle: @tr("Virtual Wayland compositor output dimensions");
 
-                                    HorizontalLayout {
-                                        spacing: 14px;
-                                        alignment: center;
-                                        padding-top: 6px;
-                                        padding-bottom: 6px;
+                                    Rectangle {
+                                        min-height: 184px;
+                                        border-radius: SettingsTokens.radius-md;
+                                        background: SettingsTokens.bg-stage;
+                                        border-width: 1px;
+                                        border-color: SettingsTokens.border;
 
-                                        Rectangle {
-                                            min-width: 220px;
-                                            max-width: 320px;
-                                            height: 120px;
-                                            border-radius: Theme.radius-md;
-                                            background: Theme.surface-active;
-                                            border-width: 2px;
-                                            border-color: Theme.accent;
-                                            clip: true;
+                                        Rectangle { x: 12px; y: 12px; width: 8px; height: 1px; background: SettingsTokens.border-strong; }
+                                        Rectangle { x: 12px; y: 12px; width: 1px; height: 8px; background: SettingsTokens.border-strong; }
+                                        Rectangle { x: parent.width - 20px; y: 12px; width: 8px; height: 1px; background: SettingsTokens.border-strong; }
+                                        Rectangle { x: parent.width - 13px; y: 12px; width: 1px; height: 8px; background: SettingsTokens.border-strong; }
 
-                                            VerticalLayout {
-                                                padding: 12px;
-                                                spacing: 8px;
-                                                alignment: space-between;
-
-                                                HorizontalLayout {
-                                                    alignment: space-between;
-
-                                                    Rectangle {
-                                                        width: 24px;
-                                                        height: 24px;
-                                                        border-radius: 12px;
-                                                        background: Theme.accent;
-                                                        Text {
-                                                            text: "1";
-                                                            color: #ffffff;
-                                                            font-size: 12px;
-                                                            font-weight: 700;
-                                                            horizontal-alignment: center;
-                                                            vertical-alignment: center;
-                                                        }
-                                                    }
-
-                                                    Rectangle {
-                                                        border-radius: 4px;
-                                                        background: Theme.control-surface;
-                                                        border-width: 1px;
-                                                        border-color: Theme.control-border;
-                                                        HorizontalLayout {
-                                                            padding-left: 6px;
-                                                            padding-right: 6px;
-                                                            padding-top: 2px;
-                                                            padding-bottom: 2px;
-                                                            Text {
-                                                                text: @tr("Nested window");
-                                                                color: Theme.accent;
-                                                                font-size: 11px;
-                                                                font-weight: 600;
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
-                                                VerticalLayout {
-                                                    spacing: 2px;
-                                                    Text {
-                                                        text: "nested-1 · " + @tr("Virtual display");
-                                                        color: Theme.text-primary;
-                                                        font-size: 13px;
-                                                        font-weight: 600;
-                                                        overflow: elide;
-                                                    }
-                                                    Text {
-                                                        text: root.display-width + "×" + root.display-height + " @ " + root.display-hz + "Hz";
-                                                        color: Theme.text-secondary;
-                                                        font-size: 11px;
-                                                        overflow: elide;
-                                                    }
-                                                }
+                                        HorizontalLayout {
+                                            padding: 20px;
+                                            alignment: center;
+                                            DisplayStageTile {
+                                                index-label: "01";
+                                                title: "nested-1 · " + @tr("Virtual display");
+                                                spec: root.display-width + "×" + root.display-height + " · " + root.display-hz + " Hz";
+                                                selected: true;
+                                                badge-text: @tr("Nested");
                                             }
                                         }
                                     }
@@ -977,55 +1174,38 @@ export component SettingsWindow inherits Window {
 
                                     SettingsRow {
                                         title: @tr("Resolution");
-                                        subtitle: @tr("Display width and height in pixels");
+                                        subtitle: @tr("Width and height in pixels");
                                         HorizontalLayout {
-                                            spacing: 8px; alignment: center;
+                                            spacing: 8px;
+                                            alignment: center;
                                             RixSpinBox { value <=> root.display-width; minimum: 640; maximum: 7680; step: 80; }
-                                            Label { text: "×"; }
+                                            Text { text: "×"; font-family: SettingsTokens.font-mono; color: SettingsTokens.text-muted; vertical-alignment: center; }
                                             RixSpinBox { value <=> root.display-height; minimum: 480; maximum: 4320; step: 60; }
                                         }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Refresh rate");
-                                        subtitle: @tr("Monitor refresh frequency in Hertz");
                                         RixSpinBox { value <=> root.display-hz; minimum: 30; maximum: 360; step: 15; suffix: " Hz"; }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Flip display");
-                                        subtitle: @tr("Invert orientation 180 degrees");
+                                        subtitle: @tr("Invert output 180 degrees");
                                         ToggleSwitch { checked <=> root.display-flipped; }
-                                    }
-
-                                    SettingsDivider {}
-
-                                    HorizontalLayout {
-                                        alignment: end;
-                                        padding-top: 4px;
-                                        padding-bottom: 4px;
-
-                                        RixButton {
-                                            text: @tr("Apply display settings");
-                                            primary: true;
-                                            enabled: !root.busy;
-                                            clicked => {
-                                                root.apply-display(root.display-width, root.display-height, root.display-hz, root.display-flipped);
-                                            }
-                                        }
                                     }
                                 }
                             }
 
                             if root.active-tab == 3: VerticalLayout {
+                                alignment: start;
                                 spacing: 16px;
                                 SettingsCard {
-                                    title: @tr("Save profile");
-                                    subtitle: @tr("Export your current appearance, panel layout, and icons into a portable profile");
+                                    title: @tr("Export profile");
+                                    subtitle: @tr("Bundle appearance, panel layout and icon settings into a portable archive");
                                     SettingsRow {
                                         title: @tr("Profile name");
-                                        subtitle: @tr("Identifier for the exported theme package");
-                                        LineEdit { text <=> root.export-theme-name; placeholder-text: @tr("Profile name"); min-width: 200px; }
+                                        LineEdit { text <=> root.export-theme-name; placeholder-text: @tr("Profile name"); min-width: 208px; }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
@@ -1050,86 +1230,147 @@ export component SettingsWindow inherits Window {
                                     SettingsDivider {}
                                     HorizontalLayout {
                                         alignment: end;
-                                        Button { text: @tr("Export"); primary: true; clicked => { root.export-theme-zip(root.export-theme-name,root.export-include-panel,root.export-include-colors,root.export-include-icons,root.export-include-cursor); } }
+                                        RixButton {
+                                            text: @tr("Export profile");
+                                            primary: true;
+                                            clicked => {
+                                                root.export-theme-zip(root.export-theme-name, root.export-include-panel, root.export-include-colors, root.export-include-icons, root.export-include-cursor);
+                                            }
+                                        }
                                     }
                                 }
 
                                 SettingsCard {
                                     title: @tr("Import profile");
-                                    subtitle: @tr("Load an existing theme archive package or choose an archive file");
+                                    subtitle: @tr("Restore a saved archive from your themes folder or disk");
                                     HorizontalLayout {
-                                        Button { text: @tr("Choose theme archive…"); clicked => { root.choose-theme-file(); } }
+                                        RixButton {
+                                            text: @tr("Choose archive");
+                                            icon: SettingsIcons.folder;
+                                            clicked => { root.choose-theme-file(); }
+                                        }
                                         Rectangle { horizontal-stretch: 1; }
                                     }
                                     if root.available-archives.length > 0: SettingsDivider {}
                                     for archive in root.available-archives: Rectangle {
-                                        min-height: 44px; border-radius: Theme.radius-sm; background: Theme.control-surface;
+                                        min-height: 44px;
+                                        border-radius: SettingsTokens.radius-md;
+                                        background: SettingsTokens.bg-stage;
+                                        border-width: 1px;
+                                        border-color: SettingsTokens.border;
                                         HorizontalLayout {
-                                            padding-top: 10px; padding-bottom: 10px; padding-left: 14px; padding-right: 14px;
-                                            Text { text: archive; color: Theme.text-primary; vertical-alignment: center; horizontal-stretch: 1; }
-                                            Button { text: @tr("Import"); primary: true; clicked => { root.import-theme-zip(archive); } }
+                                            padding-top: 8px;
+                                            padding-bottom: 8px;
+                                            padding-left: 12px;
+                                            padding-right: 8px;
+                                            spacing: 12px;
+                                            Text {
+                                                text: archive;
+                                                font-family: SettingsTokens.font-mono;
+                                                font-size: SettingsTokens.text-sm;
+                                                color: SettingsTokens.text-primary;
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 1;
+                                                overflow: elide;
+                                            }
+                                            RixButton {
+                                                text: @tr("Import");
+                                                primary: true;
+                                                clicked => { root.import-theme-zip(archive); }
+                                            }
                                         }
                                     }
                                 }
                             }
 
                             if root.active-tab == 4: VerticalLayout {
+                                alignment: start;
                                 spacing: 16px;
                                 SettingsCard {
                                     title: @tr("Panels");
-                                    subtitle: @tr("Manage taskbar panels and their display assignments");
                                     SettingsRow {
-                                        title: @tr("Selected panel");
+                                        title: @tr("Active panel");
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            ComboBox { model: root.panels; current-index <=> root.selected-panel; enabled: !root.busy; selected(_) => { root.select-panel(); } min-width: 140px; }
-                                            Button { text: @tr("Add panel"); enabled: !root.busy && root.panels.length < 16; clicked => { root.add-panel(); } }
-                                            Button { text: @tr("Remove panel"); enabled: !root.busy && root.panels.length > 1; clicked => { root.remove-panel(); } }
+                                            ComboBox {
+                                                model: root.panels;
+                                                current-index <=> root.selected-panel;
+                                                enabled: !root.busy;
+                                                selected(_) => { root.select-panel(); }
+                                                min-width: 160px;
+                                            }
+                                            RixIconButton {
+                                                icon: SettingsIcons.plus;
+                                                accessible-name: @tr("Add panel");
+                                                enabled: !root.busy && root.panels.length < 16;
+                                                clicked => { root.add-panel(); }
+                                            }
+                                            RixIconButton {
+                                                icon: SettingsIcons.trash;
+                                                accessible-name: @tr("Remove panel");
+                                                destructive: true;
+                                                enabled: !root.busy && root.panels.length > 1;
+                                                clicked => { root.remove-panel(); }
+                                            }
                                         }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
-                                        title: @tr("Display screen");
-                                        ComboBox { model: root.panel-screens; current-index <=> root.panel-screen-index; selected(_) => { root.panel-screen = root.panel-screen-ids[root.panel-screen-index]; } min-width: 195px; }
+                                        title: @tr("Display");
+                                        ComboBox {
+                                            model: root.panel-screens;
+                                            current-index <=> root.panel-screen-index;
+                                            selected(_) => { root.panel-screen = root.panel-screen-ids[root.panel-screen-index]; }
+                                            min-width: 208px;
+                                        }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Edge placement");
-                                        ComboBox { model: [@tr("Bottom"), @tr("Top")]; current-index <=> root.panel-position; min-width: 195px; }
+                                        ComboBox { model: [@tr("Bottom"), @tr("Top")]; current-index <=> root.panel-position; min-width: 208px; }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Content alignment");
-                                        ComboBox { model: [@tr("Start"), @tr("Center"), @tr("End")]; current-index <=> root.panel-alignment; min-width: 195px; }
+                                        ComboBox { model: [@tr("Start"), @tr("Center"), @tr("End")]; current-index <=> root.panel-alignment; min-width: 208px; }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Length");
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            ComboBox { model: [@tr("Fill display"), @tr("Fit content"), @tr("Fixed length")]; current-index <=> root.panel-length-mode; min-width: 140px; }
-                                            if root.panel-length-mode == 2: SpinBox { minimum: 120; maximum: 7680; value <=> root.panel-length; }
+                                            ComboBox {
+                                                model: [@tr("Fill display"), @tr("Fit content"), @tr("Fixed length")];
+                                                current-index <=> root.panel-length-mode;
+                                                min-width: 160px;
+                                            }
+                                            if root.panel-length-mode == 2: RixSpinBox {
+                                                minimum: 120;
+                                                maximum: 7680;
+                                                step: 20;
+                                                suffix: " px";
+                                                value <=> root.panel-length;
+                                            }
                                         }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
-                                        title: @tr("Reserve space for the panel");
+                                        title: @tr("Reserve screen space");
+                                        subtitle: @tr("Keep maximized windows clear of the panel");
                                         ToggleSwitch { checked <=> root.panel-exclusive; }
                                     }
                                 }
 
                                 SettingsCard {
                                     title: @tr("Panel geometry");
-                                    subtitle: @tr("Size, margin and corner curvature of the panel");
                                     SettingsRow {
                                         title: @tr("Thickness");
-                                        subtitle: @tr("Panel height in pixels");
                                         RixSpinBox { value <=> root.panel-thickness; minimum: 24; maximum: 120; step: 2; suffix: " px"; }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Floating mode");
-                                        subtitle: @tr("Detach panel from the screen edge with floating margin");
+                                        subtitle: @tr("Detach panel from the screen edge");
                                         ToggleSwitch { checked <=> root.panel-floating; }
                                     }
                                     if root.panel-floating: SettingsDivider {}
@@ -1151,123 +1392,182 @@ export component SettingsWindow inherits Window {
 
                                 SettingsCard {
                                     title: @tr("Widgets and taskbar");
-                                    subtitle: @tr("Configure widgets on the panel and window list behavior");
                                     SettingsRow {
                                         title: @tr("Application labels");
-                                        subtitle: @tr("Show window title text next to icons on the taskbar");
+                                        subtitle: @tr("Show window titles beside taskbar icons");
                                         ToggleSwitch { checked <=> root.taskbar-labels; }
                                     }
                                     SettingsDivider {}
                                     for widget[index] in root.panel-widgets: Rectangle {
-                                        min-height: 80px; background: Theme.control-surface; border-radius: Theme.radius-sm;
-                                        border-width: 1px; border-color: Theme.control-border;
-                                        VerticalLayout {
-                                            padding: 10px; spacing: 8px;
+                                        background: SettingsTokens.bg-stage;
+                                        border-radius: SettingsTokens.radius-md;
+                                        border-width: 1px;
+                                        border-color: SettingsTokens.border;
+                                        preferred-height: w-layout.preferred-height;
+                                        vertical-stretch: 0;
+                                        w-layout := VerticalLayout {
+                                            padding: 12px;
+                                            spacing: 10px;
                                             HorizontalLayout {
-                                                Label { text: widget.label; horizontal-stretch: 1; font-weight: 600; color: Theme.text-primary; }
-                                                Button { text: @tr("Move up"); enabled: index > 0; clicked => { root.move-panel-widget(index, -1); } }
-                                                Button { text: @tr("Move down"); enabled: index + 1 < root.panel-widgets.length; clicked => { root.move-panel-widget(index, 1); } }
-                                                Button { text: @tr("Delete"); clicked => { root.remove-panel-widget(index); } }
+                                                spacing: 8px;
+                                                Text {
+                                                    text: widget.label;
+                                                    horizontal-stretch: 1;
+                                                    font-size: SettingsTokens.text-md;
+                                                    font-weight: 500;
+                                                    color: SettingsTokens.text-primary;
+                                                    vertical-alignment: center;
+                                                }
+                                                RixIconButton {
+                                                    icon: SettingsIcons.arrow-up;
+                                                    accessible-name: @tr("Move up");
+                                                    enabled: index > 0;
+                                                    clicked => { root.move-panel-widget(index, -1); }
+                                                }
+                                                RixIconButton {
+                                                    icon: SettingsIcons.arrow-down;
+                                                    accessible-name: @tr("Move down");
+                                                    enabled: index + 1 < root.panel-widgets.length;
+                                                    clicked => { root.move-panel-widget(index, 1); }
+                                                }
+                                                RixIconButton {
+                                                    icon: SettingsIcons.trash;
+                                                    accessible-name: @tr("Delete");
+                                                    destructive: true;
+                                                    clicked => { root.remove-panel-widget(index); }
+                                                }
                                             }
                                             HorizontalLayout {
-                                                spacing: 10px;
-                                                Label { text: @tr("Section"); }
-                                                ComboBox { model: [@tr("Start"), @tr("Center"), @tr("End")]; current-index: widget.section; selected(_) => { widget.section = self.current-index; root.edit-panel-widget(index, widget); } }
-                                                Label { text: @tr("Width"); }
-                                                SpinBox { vertical-stretch: 0; height: Theme.menu-action-size; horizontal-stretch: 0; max-width: Theme.menu-action-size * 4; value: widget.width; minimum: 0; maximum: 1000; edited(value) => { widget.width = value; root.edit-panel-widget(index, widget); } }
+                                                spacing: 12px;
+                                                Text { text: @tr("Section"); color: SettingsTokens.text-muted; font-size: SettingsTokens.text-sm; vertical-alignment: center; }
+                                                ComboBox {
+                                                    model: [@tr("Start"), @tr("Center"), @tr("End")];
+                                                    current-index: widget.section;
+                                                    min-width: 140px;
+                                                    selected(_) => { widget.section = self.current-index; root.edit-panel-widget(index, widget); }
+                                                }
+                                                Text { text: @tr("Width"); color: SettingsTokens.text-muted; font-size: SettingsTokens.text-sm; vertical-alignment: center; }
+                                                RixSpinBox {
+                                                    value: widget.width;
+                                                    minimum: 0;
+                                                    maximum: 1000;
+                                                    step: 10;
+                                                    suffix: " px";
+                                                    changed(v) => { widget.width = v; root.edit-panel-widget(index, widget); }
+                                                }
+                                                Rectangle { horizontal-stretch: 1; }
                                             }
                                         }
                                     }
                                     HorizontalLayout {
-                                        spacing: 10px;
-                                        ComboBox { model: [@tr("Application menu"), @tr("Applications"), @tr("System tray"), @tr("Clock"), @tr("Desktop"), @tr("Spacer")]; current-index <=> root.new-widget-kind; horizontal-stretch: 1; }
-                                        Button { text: @tr("Add widget"); clicked => { root.add-panel-widget(root.new-widget-kind); } }
+                                        spacing: 8px;
+                                        ComboBox {
+                                            model: [@tr("Application menu"), @tr("Applications"), @tr("System tray"), @tr("Clock"), @tr("Desktop"), @tr("Spacer")];
+                                            current-index <=> root.new-widget-kind;
+                                            horizontal-stretch: 1;
+                                        }
+                                        RixButton {
+                                            text: @tr("Add widget");
+                                            icon: SettingsIcons.plus;
+                                            clicked => { root.add-panel-widget(root.new-widget-kind); }
+                                        }
                                     }
                                 }
 
                                 SettingsCard {
                                     title: @tr("Application menu");
-                                    subtitle: @tr("Menu size, icon and pinned actions");
                                     SettingsRow {
-                                        title: @tr("Menu dimensions");
+                                        title: @tr("Dimensions");
                                         HorizontalLayout {
-                                            spacing: 8px; alignment: center;
-                                            Label { text: @tr("Width"); }
+                                            spacing: 8px;
+                                            alignment: center;
+                                            Text { text: @tr("W"); font-family: SettingsTokens.font-mono; font-size: SettingsTokens.text-sm; color: SettingsTokens.text-muted; vertical-alignment: center; }
                                             RixSpinBox { value <=> root.launcher-width; minimum: 400; maximum: 1200; step: 50; suffix: " px"; }
-                                            Label { text: @tr("Height"); }
+                                            Text { text: @tr("H"); font-family: SettingsTokens.font-mono; font-size: SettingsTokens.text-sm; color: SettingsTokens.text-muted; vertical-alignment: center; }
                                             RixSpinBox { value <=> root.launcher-height; minimum: 400; maximum: 1000; step: 50; suffix: " px"; }
                                         }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
-                                        title: @tr("Menu alignment");
-                                        ComboBox { model: [@tr("Align to button left"), @tr("Center on button"), @tr("Align to button right")]; current-index <=> root.launcher-alignment; min-width: 195px; }
+                                        title: @tr("Alignment");
+                                        ComboBox {
+                                            model: [@tr("Align to button left"), @tr("Center on button"), @tr("Align to button right")];
+                                            current-index <=> root.launcher-alignment;
+                                            min-width: 208px;
+                                        }
                                     }
                                     SettingsDivider {}
                                     SettingsRow {
                                         title: @tr("Launcher icon");
-                                        LineEdit { text <=> root.launcher-icon; min-width: 195px; }
+                                        LineEdit { text <=> root.launcher-icon; min-width: 208px; }
                                     }
                                     SettingsDivider {}
-                                    Text { text: @tr("Menu footer actions"); font-size: 14px; font-weight: 600; color: Theme.text-primary; }
+                                    Text {
+                                        text: @tr("Footer actions");
+                                        font-size: SettingsTokens.text-md;
+                                        font-weight: 500;
+                                        color: SettingsTokens.text-primary;
+                                    }
                                     for action[index] in root.launcher-actions: ActionEditor {
                                         item: action;
                                         edited(value) => { root.edit-launcher-action(index, value); }
                                         move(delta) => { root.move-launcher-action(index, delta); }
                                     }
                                 }
-
                             }
-
-                            if root.status-message != "": Note { text: root.status-message; min-height: 24px; }
                         }
                     }
-                }
             }
 
-            VerticalLayout {
+            if root.has-apply || root.status-message != "": VerticalLayout {
                 spacing: 0px;
                 vertical-stretch: 0;
 
-                if root.has-apply || root.status-message != "": Rectangle { height: 1px; background: Theme.divider; }
+                Rectangle { height: 1px; background: SettingsTokens.border; }
 
-                if root.has-apply || root.status-message != "": Rectangle {
+                Rectangle {
                     height: 56px;
-                    background: Theme.surface;
+                    background: SettingsTokens.bg-footer;
 
                     HorizontalLayout {
                         padding-left: 32px;
                         padding-right: 32px;
+                        spacing: 16px;
 
                         if root.status-message != "": HorizontalLayout {
                             alignment: start;
                             spacing: 8px;
-                            Rectangle {
-                                width: 8px; height: 8px; border-radius: 4px;
-                                background: Theme.accent;
-                                y: (parent.height - self.height) / 2;
+                            VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: 6px;
+                                    height: 6px;
+                                    border-radius: 3px;
+                                    background: root.busy ? SettingsTokens.accent : SettingsTokens.positive;
+                                }
                             }
                             Text {
                                 text: root.status-message;
-                                color: Theme.text-primary;
-                                font-size: 13px;
-                                font-weight: 500;
+                                color: SettingsTokens.text-secondary;
+                                font-size: SettingsTokens.text-sm;
+                                font-weight: 400;
                                 overflow: elide;
                                 vertical-alignment: center;
                             }
                         }
 
-                        Rectangle {
-                            horizontal-stretch: 1;
-                        }
+                        Rectangle { horizontal-stretch: 1; }
 
-                        if root.has-apply: RixButton {
-                            text: @tr("Apply");
-                            primary: true;
-                            height: 36px;
-                            min-width: 104px;
-                            enabled: !root.busy;
-                            clicked => { root.apply-current(); }
+                        if root.has-apply: VerticalLayout {
+                            alignment: center;
+                            RixButton {
+                                text: @tr("Apply");
+                                primary: true;
+                                height: 34px;
+                                min-width: 96px;
+                                enabled: !root.busy && (root.active-tab != 2 || (!OutputPreferences.busy && !OutputPreferences.pending));
+                                clicked => { root.apply-current(); }
+                            }
                         }
                     }
                 }

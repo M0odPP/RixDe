@@ -135,73 +135,45 @@ fn is_valid_hex_color(s: &str) -> bool {
     (hex.len() == 6 || hex.len() == 8) && hex.chars().all(|c| c.is_ascii_hexdigit())
 }
 
-fn resolve_tab_icon(
-    resolver: &mut rix_assets::IconResolver,
-    names: &[&str],
-    theme: &str,
-    is_dark: bool,
-    size: u32,
-) -> slint::Image {
-    let themes: &[&str] = if is_dark {
-        &[theme, "breeze-dark", "breeze", "Adwaita", "hicolor"]
-    } else {
-        &[theme, "breeze", "Adwaita", "hicolor", "breeze-dark"]
-    };
-    for &t in themes {
-        for &name in names {
-            if let Some(path) = resolver.resolve(name, t, size, None) {
-                if let Ok(img) = slint::Image::load_from_path(&path) {
-                    return img;
-                }
-            }
-        }
-    }
-    slint::Image::default()
-}
-
 #[derive(Clone, Copy)]
 pub(crate) struct NavItemDef {
     pub tab_id: i32,
     pub name: &'static str,
     pub desc: &'static str,
-    pub icon: &'static [&'static str],
     pub section: &'static str,
     pub is_first: bool,
 }
 
 pub(crate) const NAV_ITEMS: &[NavItemDef] = &[
 
-    NavItemDef { tab_id: 0, name: "Appearance & style", desc: "Installed themes, blur shaders, accent colors and glass effects", icon: &["preferences-desktop-theme", "preferences-desktop-appearance", "style"], section: "Personalization", is_first: true },
-    NavItemDef { tab_id: 11, name: "Desktop wallpaper", desc: "Background wallpaper image and slideshow settings", icon: &["preferences-desktop-wallpaper", "background", "image-x-generic"], section: "Personalization", is_first: false },
-    NavItemDef { tab_id: 1, name: "Icons and cursor", desc: "Application icon set, pointer style and cursor size", icon: &["preferences-desktop-icons", "preferences-desktop-theme", "applications-graphics"], section: "Personalization", is_first: false },
-    NavItemDef { tab_id: 4, name: "Panel and menu", desc: "Taskbar geometry, widgets and application launcher menu", icon: &["preferences-desktop", "system-run", "applications-system"], section: "Personalization", is_first: false },
-    NavItemDef { tab_id: 3, name: "Theme backup & profiles", desc: "Export and import theme archive packages and profiles", icon: &["preferences-desktop-theme-global", "preferences-desktop-color", "document-save"], section: "Personalization", is_first: false },
-    NavItemDef { tab_id: 17, name: "Window appearance", desc: "Window frames, shadow effects and per-application rules", icon: &["preferences-system-windows", "preferences-desktop-theme", "window-duplicate"], section: "Personalization", is_first: false },
+    NavItemDef { tab_id: 0, name: "Appearance", desc: "Desktop themes, backdrop blur, surface opacity and accent color", section: "Personalization", is_first: true },
+    NavItemDef { tab_id: 11, name: "Wallpaper", desc: "Desktop image, solid fill, dimming and video playback", section: "Personalization", is_first: false },
+    NavItemDef { tab_id: 1, name: "Icons and cursor", desc: "Icon pack, pointer style and cursor size", section: "Personalization", is_first: false },
+    NavItemDef { tab_id: 4, name: "Panel and menu", desc: "Taskbar geometry, panel widgets and application launcher", section: "Personalization", is_first: false },
+    NavItemDef { tab_id: 3, name: "Theme profiles", desc: "Export and import portable desktop appearance archives", section: "Personalization", is_first: false },
+    NavItemDef { tab_id: 17, name: "Window frames", desc: "Title bar material and per-application decoration rules", section: "Personalization", is_first: false },
 
-    NavItemDef { tab_id: 2, name: "Display", desc: "Screen resolution, refresh rate and multi-monitor setup", icon: &["preferences-desktop-display", "video-display", "preferences-system-windows"], section: "Hardware and system", is_first: true },
-    NavItemDef { tab_id: 7, name: "Audio", desc: "Sound volume, input/output audio devices and amplification", icon: &["audio-volume-high", "audio-card", "multimedia-volume-control"], section: "Hardware and system", is_first: false },
-    NavItemDef { tab_id: 8, name: "Network and internet", desc: "Wi-Fi connections, wired ethernet and network profiles", icon: &["network-wireless", "network-wired", "network-workgroup"], section: "Hardware and system", is_first: false },
-    NavItemDef { tab_id: 16, name: "Power", desc: "Battery levels, energy saving and sleep behavior", icon: &["preferences-system-power-management", "battery", "power"], section: "Hardware and system", is_first: false },
-    NavItemDef { tab_id: 6, name: "Keyboard", desc: "Keyboard layouts, switching shortcuts and repeat rate", icon: &["input-keyboard", "keyboard", "preferences-desktop-keyboard"], section: "Hardware and system", is_first: false },
+    NavItemDef { tab_id: 2, name: "Display", desc: "Monitor arrangement, resolution, refresh rate and scale", section: "Hardware", is_first: true },
+    NavItemDef { tab_id: 7, name: "Audio", desc: "Output devices, microphones, levels and volume boost", section: "Hardware", is_first: false },
+    NavItemDef { tab_id: 8, name: "Network", desc: "Wi-Fi connections, ethernet, VPN and saved profiles", section: "Hardware", is_first: false },
+    NavItemDef { tab_id: 16, name: "Power", desc: "Energy profiles, display timeouts and sleep behavior", section: "Hardware", is_first: false },
+    NavItemDef { tab_id: 6, name: "Keyboard", desc: "Input layouts, switching shortcuts and key repeat", section: "Hardware", is_first: false },
 
-    NavItemDef { tab_id: 10, name: "Desktop behavior", desc: "Workspaces, window management and desktop interaction", icon: &["configure", "preferences-system", "settings"], section: "Applications and behavior", is_first: true },
-    NavItemDef { tab_id: 9, name: "Autostart", desc: "Applications launched automatically at user login", icon: &["applications-all", "system-run", "system-software-install"], section: "Applications and behavior", is_first: false },
-    NavItemDef { tab_id: 15, name: "Default applications", desc: "Preferred web browser, file manager, terminal and editors", icon: &["preferences-desktop-default-applications", "applications-system", "preferences-system"], section: "Applications and behavior", is_first: false },
-    NavItemDef { tab_id: 12, name: "Extensions", desc: "System plugins, capture studio and modular extensions", icon: &["preferences-plugin", "application-x-addon", "extension"], section: "Applications and behavior", is_first: false },
+    NavItemDef { tab_id: 10, name: "Desktop behavior", desc: "Window snapping, taskbar previews, switcher and clipboard", section: "Applications", is_first: true },
+    NavItemDef { tab_id: 9, name: "Autostart", desc: "Applications launched automatically at login", section: "Applications", is_first: false },
+    NavItemDef { tab_id: 15, name: "Default apps", desc: "Preferred handlers for web, mail, media and file types", section: "Applications", is_first: false },
+    NavItemDef { tab_id: 12, name: "Extensions", desc: "Desktop plugins and screen capture frame rate", section: "Applications", is_first: false },
 
-    NavItemDef { tab_id: 18, name: "Passwords and keys", desc: "Keyring credentials, Secret Service and security vaults", icon: &["dialog-password", "security-high", "auth-sim"], section: "Security and locale", is_first: true },
-    NavItemDef { tab_id: 14, name: "Language & region", desc: "System language, translation catalogs and regional formats", icon: &["preferences-desktop-locale", "config-language", "locale"], section: "Security and locale", is_first: false },
-
-    NavItemDef { tab_id: 13, name: "About RixDE", desc: "System version, desktop components and licenses", icon: &["help-about", "help-browser", "system-help", "dialog-information"], section: "Information", is_first: true },
+    NavItemDef { tab_id: 18, name: "Passwords and keys", desc: "Clavis vault and Secret Service keyring backends", section: "System", is_first: true },
+    NavItemDef { tab_id: 14, name: "Language and region", desc: "Interface language and calendar week start", section: "System", is_first: false },
+    NavItemDef { tab_id: 13, name: "About RixDE", desc: "System version, compositor stack and licenses", section: "System", is_first: false },
 ];
 
 pub(crate) fn refresh_navigation(window: &SettingsWindow, icon_theme: &str) {
     refresh_navigation_filtered(window, icon_theme, "");
 }
 
-pub(crate) fn refresh_navigation_filtered(window: &SettingsWindow, icon_theme: &str, query: &str) {
-    let is_dark = window.get_color_mode() != "light";
-    let mut resolver = rix_assets::IconResolver::default();
+pub(crate) fn refresh_navigation_filtered(window: &SettingsWindow, _icon_theme: &str, query: &str) {
     let q = query.trim().to_lowercase();
     let is_filtering = !q.is_empty();
 
@@ -226,7 +198,7 @@ pub(crate) fn refresh_navigation_filtered(window: &SettingsWindow, icon_theme: &
             name: i18n::tr(item.name),
             section: if is_filtering { "".into() } else { i18n::tr(item.section) },
             is_first_in_section: if is_filtering { false } else { item.is_first },
-            icon: resolve_tab_icon(&mut resolver, item.icon, icon_theme, is_dark, 24),
+            icon: slint::Image::default(),
         })
         .collect();
 

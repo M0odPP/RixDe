@@ -1,9 +1,8 @@
-import { Theme } from "../../../ui/common/theme.slint";
 import { ToggleSwitch } from "../../../ui/common/controls.slint";
-import { Button } from "std-widgets.slint";
 import { ComboBox } from "../../../ui/common/combo_box.slint";
 import { LineEdit } from "../../../ui/common/line_edit.slint";
-import { SettingsCard, SettingsRow, SettingsDivider } from "card.slint";
+import { SettingsTokens, SettingsIcons } from "tokens.slint";
+import { SettingsCard, SettingsRow, SettingsDivider, RixButton, RixIconButton } from "card.slint";
 
 export struct AppearanceRuleRow { app-id: string, theme-name: string, material: bool }
 
@@ -37,16 +36,19 @@ export component WindowAppearanceView inherits Rectangle {
     in property <bool> busy;
     background: transparent;
     preferred-height: page-content.preferred-height;
+    vertical-stretch: 0;
+
     page-content := VerticalLayout {
+        alignment: start;
         spacing: 16px;
 
         SettingsCard {
-            title: @tr("Window frames and decoration materials");
-            subtitle: @tr("Appearance of title bars, borders and glass shaders on application windows");
+            title: @tr("Window frames");
+            subtitle: @tr("Title bars, borders and glass backdrop on client windows");
 
             SettingsRow {
-                title: @tr("Use desktop material for windows");
-                subtitle: @tr("Render translucent frosted glass title bars on supported client windows");
+                title: @tr("Use desktop material");
+                subtitle: @tr("Apply frosted glass title bars to supported windows");
                 ToggleSwitch {
                     checked <=> WindowAppearancePreferences.use-desktop-material;
                     enabled: !root.busy;
@@ -55,12 +57,13 @@ export component WindowAppearanceView inherits Rectangle {
         }
 
         SettingsCard {
-            title: @tr("Per-application decoration rules");
-            subtitle: @tr("Override decoration style or force opaque frames for specific programs");
+            title: @tr("Application rules");
+            subtitle: @tr("Override decoration theme or force opaque frames per app");
 
             HorizontalLayout {
-                Button {
-                    text: @tr("Add application rule…");
+                RixButton {
+                    text: @tr("Add rule");
+                    icon: SettingsIcons.plus;
                     primary: true;
                     enabled: !root.busy && !WindowAppearancePreferences.editor-open && WindowAppearancePreferences.rules.length < 64;
                     clicked => { WindowAppearancePreferences.add-rule(); }
@@ -72,19 +75,23 @@ export component WindowAppearanceView inherits Rectangle {
 
             for rule[index] in WindowAppearancePreferences.rules: VerticalLayout {
                 spacing: 0px;
+                vertical-stretch: 0;
                 if index > 0: SettingsDivider {}
                 SettingsRow {
                     title: rule.app-id;
-                    subtitle: rule.theme-name + " · " + (rule.material ? @tr("Frosted glass material") : @tr("Opaque frame"));
+                    subtitle: rule.theme-name + " · " + (rule.material ? @tr("Frosted glass") : @tr("Opaque frame"));
                     HorizontalLayout {
-                        spacing: 8px; alignment: center;
-                        Button {
+                        spacing: 8px;
+                        alignment: center;
+                        RixButton {
                             text: @tr("Edit");
                             enabled: !root.busy && !WindowAppearancePreferences.editor-open;
                             clicked => { WindowAppearancePreferences.edit-rule(index); }
                         }
-                        Button {
-                            text: @tr("Delete");
+                        RixIconButton {
+                            icon: SettingsIcons.trash;
+                            accessible-name: @tr("Delete");
+                            destructive: true;
                             enabled: !root.busy && !WindowAppearancePreferences.editor-open;
                             clicked => { WindowAppearancePreferences.remove-rule(index); }
                         }
@@ -93,22 +100,23 @@ export component WindowAppearanceView inherits Rectangle {
             }
 
             if WindowAppearancePreferences.rules.length == 0: Text {
-                text: @tr("No application rules configured. All windows follow the desktop default.");
-                color: Theme.text-secondary; font-size: 13px;
+                text: @tr("No application rules configured — all windows follow the desktop default");
+                color: SettingsTokens.text-muted;
+                font-size: SettingsTokens.text-md;
+                wrap: word-wrap;
             }
         }
 
         if WindowAppearancePreferences.editor-open: SettingsCard {
             title: WindowAppearancePreferences.editing-existing ? @tr("Edit application rule") : @tr("New application rule");
-            subtitle: @tr("Specify window matching criteria and decoration overrides");
 
             SettingsRow {
-                title: @tr("Application ID or binary name");
-                subtitle: @tr("Exact match against desktop file or window class");
+                title: @tr("Application ID");
+                subtitle: @tr("Exact Wayland app_id or desktop file identifier");
                 LineEdit {
                     text <=> WindowAppearancePreferences.app-id;
                     placeholder-text: "org.mozilla.firefox";
-                    min-width: 200px;
+                    min-width: 208px;
                 }
             }
 
@@ -116,17 +124,18 @@ export component WindowAppearanceView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Running applications");
-                subtitle: @tr("Select from open windows to populate ID");
+                subtitle: @tr("Pick an open window to fill its ID");
                 HorizontalLayout {
                     spacing: 8px;
                     ComboBox {
                         model: WindowAppearancePreferences.running-apps;
                         current-index <=> WindowAppearancePreferences.running-index;
-                        min-width: 195px;
+                        min-width: 208px;
                         selected(_) => { WindowAppearancePreferences.choose-running(self.current-index); }
                     }
-                    Button {
-                        text: @tr("Refresh");
+                    RixIconButton {
+                        icon: SettingsIcons.refresh;
+                        accessible-name: @tr("Refresh");
                         enabled: !WindowAppearancePreferences.refreshing;
                         clicked => { WindowAppearancePreferences.refresh-apps(); }
                     }
@@ -137,21 +146,32 @@ export component WindowAppearanceView inherits Rectangle {
 
             SettingsRow {
                 title: @tr("Frame material");
-                subtitle: @tr("Render with glass material or solid opaque color");
+                subtitle: @tr("Use translucent glass material instead of an opaque frame");
                 ToggleSwitch { checked <=> WindowAppearancePreferences.rule-material; }
             }
 
             SettingsDivider {}
 
             HorizontalLayout {
-                spacing: 10px; alignment: end;
-                Button { text: @tr("Cancel"); clicked => { WindowAppearancePreferences.cancel-rule(); } }
-                Button { text: @tr("Save rule"); primary: true; clicked => { WindowAppearancePreferences.store-rule(); } }
+                spacing: 8px;
+                alignment: end;
+                RixButton {
+                    text: @tr("Cancel");
+                    clicked => { WindowAppearancePreferences.cancel-rule(); }
+                }
+                RixButton {
+                    text: @tr("Save rule");
+                    primary: true;
+                    clicked => { WindowAppearancePreferences.store-rule(); }
+                }
             }
         }
 
         if WindowAppearancePreferences.status != "": Text {
-            text: WindowAppearancePreferences.status; color: Theme.text-secondary; wrap: word-wrap;
+            text: WindowAppearancePreferences.status;
+            color: SettingsTokens.text-secondary;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
     }
 }

@@ -1,3 +1,4 @@
+import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { MenuSurface } from "context_menu.slint";
 import { LineEdit } from "line_edit.slint";
@@ -33,25 +34,31 @@ export component ChooserButton inherits Rectangle {
     in property <bool> primary;
     in property <bool> enabled: true;
     callback clicked();
-    min-height: Math.max(34px, Theme.menu-action-size);
-    preferred-height: self.min-height;
-    preferred-width: Math.max(76px, label.preferred-width + Theme.spacing-xl * 2);
-    min-width: label.preferred-width + Theme.spacing-lg * 2;
+    private property <bool> is-light: Palette.color-scheme == ColorScheme.light;
+    min-height: 32px;
+    preferred-height: 32px;
+    preferred-width: Math.max(76px, label.preferred-width + 24px);
+    min-width: label.preferred-width + 20px;
     horizontal-stretch: 0; vertical-stretch: 0;
-    border-radius: Theme.radius-sm;
-    background: root.primary ? (touch.pressed ? Theme.accent.darker(15%) : touch.has-hover ? Theme.accent-hover : Theme.accent)
+    border-radius: 8px;
+    background: root.primary
+        ? (touch.pressed ? (root.is-light ? #0b0c0e : #d4d4d8)
+            : touch.has-hover ? (root.is-light ? #2b2f37 : #ffffff)
+            : (root.is-light ? #16181c : #ededef))
         : (touch.pressed ? Theme.surface-active : touch.has-hover ? Theme.surface-hover : Theme.control-surface);
-    border-width: 1px;
-    border-color: root.primary ? (keys.has-focus ? #ffffff : transparent)
+    border-width: root.primary ? (keys.has-focus ? 1px : 0px) : 1px;
+    border-color: root.primary ? Theme.accent
         : (keys.has-focus ? Theme.accent : touch.has-hover ? Theme.border-highlight : Theme.control-border);
+    animate background { duration: Theme.hover-duration * 1ms; easing: ease-out; }
+    animate border-color { duration: Theme.hover-duration * 1ms; easing: ease-out; }
     opacity: root.enabled ? 1 : 0.45;
     accessible-role: button; accessible-label: root.text; accessible-enabled: root.enabled;
     accessible-action-default => { if root.enabled { root.clicked(); } }
     forward-focus: keys;
     label := Text {
         text: root.text;
-        color: root.primary ? #ffffff : Theme.text-primary;
-        font-weight: root.primary ? 600 : 500;
+        color: root.primary ? (root.is-light ? #ffffff : #111214) : Theme.text-primary;
+        font-weight: 500;
         font-size: Theme.font-size-md;
         horizontal-alignment: center;
         vertical-alignment: center;
@@ -64,9 +71,11 @@ export component ApplicationChooserPanel inherits MenuSurface {
     in property <bool> desktop-material;
     private property <int> selected: ApplicationChooser.selected-index;
     private property <length> row-height: Theme.menu-action-size + Theme.spacing-lg;
+    surface-radius: Theme.radius-md;
     material-supported: root.desktop-material;
     opaque: !root.desktop-material;
     forward-focus: search;
+    TouchArea {}
     public function focus-chooser() { search.focus(); }
     function move-selection(delta: int) {
         if !ApplicationChooser.busy && ApplicationChooser.applications.length > 0 {
@@ -133,7 +142,12 @@ export component ApplicationChooserPanel inherits MenuSurface {
                                 }
                                 if app.is-default: Text { text: @tr("Default"); color: Theme.accent; font-size: Theme.font-size-sm; vertical-alignment: center; horizontal-stretch: 0; }
                             }
-                            row := TouchArea { enabled: !ApplicationChooser.busy; mouse-cursor: pointer; clicked => { ApplicationChooser.selected-index = index; keys.focus(); } }
+                            row := TouchArea {
+                                enabled: !ApplicationChooser.busy;
+                                mouse-cursor: pointer;
+                                clicked => { ApplicationChooser.selected-index = index; keys.focus(); }
+                                double-clicked => { ApplicationChooser.selected-index = index; ApplicationChooser.accept(); }
+                            }
                         }
                     }
                 }

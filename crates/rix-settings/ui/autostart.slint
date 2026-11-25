@@ -1,8 +1,7 @@
-import { Theme } from "../../../ui/common/theme.slint";
-import { Button } from "std-widgets.slint";
 import { ToggleSwitch } from "../../../ui/common/controls.slint";
 import { LineEdit } from "../../../ui/common/line_edit.slint";
-import { SettingsCard, SettingsRow, SettingsDivider } from "card.slint";
+import { SettingsTokens, SettingsIcons } from "tokens.slint";
+import { SettingsCard, SettingsRow, SettingsDivider, RixButton, RixIconButton } from "card.slint";
 
 export struct AutostartChoice { id: string, name: string, enabled: bool, available: bool, custom: bool }
 
@@ -21,16 +20,21 @@ export global AutostartSettings {
 export component AutostartView inherits Rectangle {
     background: transparent;
     preferred-height: content.preferred-height;
+    vertical-stretch: 0;
+
     content := VerticalLayout {
+        alignment: start;
         spacing: 16px;
 
         SettingsCard {
             title: @tr("Startup applications");
-            subtitle: @tr("Programs that launch automatically when signing into your desktop session");
+            subtitle: @tr("Programs launched automatically on session login");
 
             HorizontalLayout {
-                Button {
-                    text: AutostartSettings.picker-open ? @tr("Back to startup list") : @tr("Add startup application…");
+                RixButton {
+                    text: AutostartSettings.picker-open ? @tr("Back to list") : @tr("Add application");
+                    icon: AutostartSettings.picker-open ? SettingsIcons.close : SettingsIcons.plus;
+                    primary: !AutostartSettings.picker-open;
                     clicked => {
                         AutostartSettings.picker-open = !AutostartSettings.picker-open;
                         AutostartSettings.search(AutostartSettings.query);
@@ -43,22 +47,32 @@ export component AutostartView inherits Rectangle {
 
             if !AutostartSettings.picker-open: VerticalLayout {
                 spacing: 0px;
+                vertical-stretch: 0;
                 for app[index] in AutostartSettings.entries: VerticalLayout {
                     spacing: 0px;
+                    vertical-stretch: 0;
                     if index > 0: SettingsDivider {}
                     SettingsRow {
                         title: app.name;
-                        subtitle: !app.available ? @tr("Application binary not found") : app.custom ? @tr("Custom user entry") : @tr("System entry");
+                        subtitle: !app.available ? @tr("Application binary not found")
+                            : app.custom ? @tr("Custom user entry") : @tr("System entry");
                         HorizontalLayout {
-                            spacing: 12px; alignment: center;
+                            spacing: 12px;
+                            alignment: center;
                             ToggleSwitch {
                                 checked: app.enabled;
                                 enabled: app.available || app.enabled;
                                 toggled => { AutostartSettings.toggle(app.id, self.checked); }
                             }
-                            Button {
-                                text: app.custom ? @tr("Delete") : @tr("Disable");
-                                enabled: app.custom || app.enabled;
+                            if app.custom: RixIconButton {
+                                icon: SettingsIcons.trash;
+                                accessible-name: @tr("Delete");
+                                destructive: true;
+                                clicked => { AutostartSettings.remove(app.id); }
+                            }
+                            if !app.custom: RixButton {
+                                text: @tr("Disable");
+                                enabled: app.enabled;
                                 clicked => { AutostartSettings.remove(app.id); }
                             }
                         }
@@ -68,27 +82,30 @@ export component AutostartView inherits Rectangle {
 
             if AutostartSettings.entries.length == 0 && !AutostartSettings.picker-open: Text {
                 text: @tr("No startup applications configured");
-                color: Theme.text-secondary; font-size: 13px;
+                color: SettingsTokens.text-muted;
+                font-size: SettingsTokens.text-md;
             }
         }
 
         if AutostartSettings.picker-open: SettingsCard {
             title: @tr("Select installed application");
-            subtitle: @tr("Choose a program to add to your login autostart list");
 
             LineEdit {
-                placeholder-text: @tr("Filter applications by name…");
+                leading-icon: SettingsIcons.search;
+                has-icon: true;
+                placeholder-text: @tr("Filter applications");
                 text <=> AutostartSettings.query;
                 edited(value) => { AutostartSettings.search(value); }
             }
 
             for app[index] in AutostartSettings.apps: VerticalLayout {
                 spacing: 0px;
+                vertical-stretch: 0;
                 if index > 0: SettingsDivider {}
                 SettingsRow {
                     title: app.name;
-                    Button {
-                        text: @tr("Add to autostart");
+                    RixButton {
+                        text: @tr("Add");
                         primary: true;
                         clicked => { AutostartSettings.add(app.id); }
                     }
@@ -97,7 +114,10 @@ export component AutostartView inherits Rectangle {
         }
 
         if AutostartSettings.error != "": Text {
-            text: AutostartSettings.error; color: Theme.accent; wrap: word-wrap;
+            text: AutostartSettings.error;
+            color: SettingsTokens.danger;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
     }
 }

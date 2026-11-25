@@ -2,7 +2,7 @@ import { Slider, ToggleSwitch } from "controls.slint";
 import { Theme } from "theme.slint";
 import { Icons } from "icons.slint";
 import { ScrollArea } from "scroll_area.slint";
-import { Button, CheckBox } from "std-widgets.slint";
+import { Button, CheckBox, Palette } from "std-widgets.slint";
 import { ComboBox } from "combo_box.slint";
 import { LineEdit } from "line_edit.slint";
 import { NetworkDeviceRow, NetworkProfileDraft } from "network_types.slint";
@@ -103,6 +103,69 @@ export global SystemState {
     callback calendar-today();
     callback open-settings(string);
 }
+component SystemButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: false;
+    in property <bool> destructive: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    private property <bool> is-light: Palette.color-scheme == ColorScheme.light;
+    height: 32px;
+    min-width: 64px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: 8px;
+    opacity: root.enabled ? 1 : 0.45;
+    forward-focus: keys;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+
+    background: !root.enabled
+        ? (root.primary ? (root.is-light ? #16181c55 : #ededef55) : Theme.control-surface)
+        : root.primary
+            ? (touch.pressed ? (root.is-light ? #0b0c0e : #d4d4d8)
+                : touch.has-hover ? (root.is-light ? #2b2f37 : #ffffff)
+                : (root.is-light ? #16181c : #ededef))
+            : root.destructive
+                ? (touch.pressed ? Theme.danger-bg.darker(10%) : touch.has-hover ? Theme.danger-bg : Theme.control-surface)
+                : (touch.pressed ? Theme.surface-active : touch.has-hover ? Theme.surface-hover : Theme.control-surface);
+
+    border-width: root.primary ? (keys.has-focus ? 1px : 0px) : 1px;
+    border-color: keys.has-focus ? Theme.accent
+        : root.destructive ? Theme.danger
+        : touch.has-hover ? Theme.border-highlight : Theme.control-border;
+    animate background { duration: Theme.hover-duration * 1ms; easing: ease-out; }
+    animate border-color { duration: Theme.hover-duration * 1ms; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        alignment: center;
+        Text {
+            text: root.text;
+            color: root.primary ? (root.is-light ? #ffffff : #111214)
+                : root.destructive ? Theme.danger : Theme.text-primary;
+            font-size: 13px;
+            font-weight: 500;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+
+    keys := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => { if e.text == Key.Return || e.text == " " { root.clicked(); return accept; } reject }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { keys.focus(); root.clicked(); }
+    }
+}
+
 export component IconButton inherits Rectangle {
     in property <image> icon;
     in property <bool> selected;
@@ -110,37 +173,42 @@ export component IconButton inherits Rectangle {
     forward-focus: keys;
     accessible-role: button;
     accessible-action-default => { root.clicked(); }
-    width: Theme.menu-action-size + Theme.spacing-xs;
-    height: self.width;
-    border-radius: Theme.radius-sm;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: root.selected ? Theme.border-highlight : transparent;
     background: touch.has-hover ? Theme.surface-hover : root.selected ? Theme.surface-active : transparent;
     animate background { duration: Theme.hover-duration * 1ms; easing: ease-out; }
-    Image { source: root.icon; width: Theme.icon-size; height: self.width; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; image-fit: contain; colorize: Theme.text-primary; }
+    Image { source: root.icon; width: 16px; height: 16px; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; image-fit: contain; colorize: root.selected ? Theme.accent : Theme.text-secondary; }
     keys := FocusScope { key-pressed(event) => { if event.text == Key.Return || event.text == " " { root.clicked(); return accept; } reject } }
     touch := TouchArea { mouse-cursor: pointer; clicked => { keys.focus(); root.clicked(); } }
 }
-export component SectionTitle inherits Text { color: Theme.text-primary; font-size: Theme.font-size-lg; font-weight: 600; }
-export component MutedText inherits Text { color: Theme.text-secondary; font-size: Theme.font-size-md; wrap: word-wrap; }
+export component SectionTitle inherits Text { color: Theme.text-primary; font-size: 15px; font-weight: 500; }
+export component MutedText inherits Text { color: Theme.text-secondary; font-size: 12px; wrap: word-wrap; }
 component AudioDevice inherits Rectangle {
     in property <AudioRow> entry;
-    height: Theme.audio-row-height;
+    height: 96px;
     vertical-stretch: 0;
-    background: entry.preferred ? Theme.surface-active : Theme.control-surface;
-    border-width: 1px; border-color: Theme.control-border;
-    border-radius: Theme.radius-md;
+    background: entry.preferred ? Theme.surface-active.with-alpha(0.55) : Theme.control-surface;
+    border-width: 1px; border-color: entry.preferred ? Theme.accent.with-alpha(0.35) : Theme.control-border;
+    border-radius: 8px;
     VerticalLayout {
-        padding: Theme.spacing-lg; spacing: Theme.default-spacing;
+        padding: 12px; spacing: 8px;
         HorizontalLayout {
-            spacing: Theme.default-spacing;
-            Image { source: root.entry.icon; width: Theme.icon-size-lg; height: Theme.icon-size-lg; image-fit: contain; colorize: Theme.text-primary; }
-            Text { text: root.entry.name; color: Theme.text-primary; font-size: Theme.font-size-md; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
-            if root.entry.kind == "sink" || root.entry.kind == "source": Button { text: root.entry.preferred ? @tr("Default") : @tr("Select"); enabled: !root.entry.preferred; clicked => { SystemState.audio-default(root.entry.key); } }
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Image { source: root.entry.icon; width: 18px; height: 18px; image-fit: contain; colorize: root.entry.preferred ? Theme.text-primary : Theme.text-secondary; }
+            }
+            Text { text: root.entry.name; color: Theme.text-primary; font-size: 13px; font-weight: 500; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
+            if root.entry.kind == "sink" || root.entry.kind == "source": SystemButton { text: root.entry.preferred ? @tr("Default") : @tr("Select"); enabled: !root.entry.preferred; clicked => { SystemState.audio-default(root.entry.key); } }
         }
         HorizontalLayout {
-            spacing: Theme.default-spacing;
+            spacing: 8px;
             IconButton { icon: root.entry.icon; selected: root.entry.muted; clicked => { SystemState.audio-mute(root.entry.key, !root.entry.muted); } }
             Slider { horizontal-stretch: 1; minimum: 0; maximum: SystemState.maximum-volume; value: root.entry.volume; changed(value) => { SystemState.audio-volume(root.entry.key, round(value)); } }
-            Text { text: root.entry.volume + "%"; color: root.entry.muted ? Theme.text-muted : Theme.text-primary; font-size: Theme.font-size-md; width: 44px; vertical-alignment: center; horizontal-alignment: right; }
+            Text { text: root.entry.volume + "%"; color: root.entry.muted ? Theme.text-muted : Theme.text-secondary; font-family: "Noto Sans Mono"; font-size: 12px; width: 48px; vertical-alignment: center; horizontal-alignment: right; }
         }
     }
 }
@@ -148,26 +216,62 @@ export component AudioView inherits Rectangle {
     in property <bool> full-mode: false;
     in-out property <int> tab;
     VerticalLayout {
-        padding: root.full-mode ? 0px : Theme.spacing-xl;
-        spacing: Theme.spacing-lg;
+        alignment: root.full-mode ? LayoutAlignment.start : LayoutAlignment.stretch;
+        padding: root.full-mode ? 0px : 16px;
+        spacing: 12px;
         if !root.full-mode: HorizontalLayout {
+            vertical-stretch: 0;
             SectionTitle { text: @tr("Volume"); horizontal-stretch: 1; vertical-alignment: center; }
             IconButton { icon: Icons.configure; clicked => { SystemState.open-settings("audio"); } }
         }
         HorizontalLayout {
-            for title[index] in [@tr("Devices"), @tr("Applications")]: Button { text: title; primary: root.tab == index; clicked => { root.tab = index; } }
+            alignment: start;
+            vertical-stretch: 0;
+            Rectangle {
+                height: 36px;
+                border-radius: 8px;
+                background: Theme.control-surface;
+                border-width: 1px;
+                border-color: Theme.control-border;
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 2px;
+                    for title[index] in [@tr("Devices"), @tr("Applications")]: Rectangle {
+                        min-width: 96px;
+                        height: 28px;
+                        border-radius: 5px;
+                        background: root.tab == index ? Theme.surface-active : tab-touch.has-hover ? Theme.surface-hover : transparent;
+                        border-width: root.tab == index ? 1px : 0px;
+                        border-color: Theme.border-highlight;
+                        animate background { duration: Theme.hover-duration * 1ms; easing: ease-out; }
+                        HorizontalLayout {
+                            padding-left: 12px; padding-right: 12px; alignment: center;
+                            Text {
+                                text: title;
+                                font-size: 12px;
+                                font-weight: root.tab == index ? 500 : 400;
+                                color: root.tab == index ? Theme.text-primary : Theme.text-secondary;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                            }
+                        }
+                        tab-touch := TouchArea { mouse-cursor: pointer; clicked => { root.tab = index; } }
+                    }
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
         }
         ScrollArea {
             min-height: root.full-mode ? contents.preferred-height : 0px;
             vertical-stretch: root.full-mode ? 0 : 1;
             content-height: contents.preferred-height;
             contents := VerticalLayout {
-                x: 0px; y: 0px; width: parent.content-width; height: self.preferred-height; spacing: Theme.default-spacing; alignment: start;
+                x: 0px; y: 0px; width: parent.content-width; height: self.preferred-height; spacing: 12px; alignment: start;
                 for group in ["sink", "source", "sink-input", "source-output"]: VerticalLayout {
-                    spacing: Theme.default-spacing;
+                    spacing: 8px;
                     if root.tab == (group == "sink" || group == "source" ? 0 : 1): VerticalLayout {
-                        spacing: Theme.default-spacing;
-                        MutedText { text: group == "sink" ? @tr("Audio output") : group == "source" ? @tr("Microphones") : group == "sink-input" ? @tr("Playback") : @tr("Record"); }
+                        spacing: 8px;
+                        Text { text: group == "sink" ? @tr("Audio output") : group == "source" ? @tr("Microphones") : group == "sink-input" ? @tr("Playback") : @tr("Record"); color: Theme.text-muted; font-size: 12px; font-weight: 500; }
                         for row in SystemState.audio: VerticalLayout { if row.kind == group: AudioDevice { entry: row; } }
                     }
                 }
@@ -281,8 +385,9 @@ export component NetworkView inherits Rectangle {
                 if SystemState.network-credential-extra: LineEdit { text <=> root.secret-extra; enabled: !root.secret-submitted; placeholder-text: @tr("VPN credentials: key=value or JSON"); input-type: root.secret-show ? InputType.text : InputType.password; accepted(value) => { root.reply-credentials(false); } }
                 CheckBox { text: @tr("Show password"); checked <=> root.secret-show; enabled: !root.secret-submitted; }
                 HorizontalLayout {
-                    Button { text: @tr("Cancel"); clicked => { root.reply-credentials(true); } }
-                    Button { text: root.secret-submitted ? @tr("Connecting…") : @tr("Continue"); primary: true; enabled: !root.secret-submitted && (!SystemState.network-credential-username || root.secret-username != "") && (!SystemState.network-credential-password || root.secret-password != "" || (SystemState.network-credential-extra && root.secret-extra != "")) && (!SystemState.network-credential-key-password || root.secret-key-password != ""); clicked => { root.reply-credentials(false); } }
+                    spacing: 8px;
+                    SystemButton { text: @tr("Cancel"); clicked => { root.reply-credentials(true); } }
+                    SystemButton { text: root.secret-submitted ? @tr("Connecting…") : @tr("Continue"); primary: true; enabled: !root.secret-submitted && (!SystemState.network-credential-username || root.secret-username != "") && (!SystemState.network-credential-password || root.secret-password != "" || (SystemState.network-credential-extra && root.secret-extra != "")) && (!SystemState.network-credential-key-password || root.secret-key-password != ""); clicked => { root.reply-credentials(false); } }
                 }
                 if SystemState.network-error != "": MutedText { text: SystemState.network-error; color: Theme.danger; }
             }
@@ -308,21 +413,22 @@ export component NetworkView inherits Rectangle {
                 CheckBox { text: @tr("Remember network"); checked <=> root.remember; enabled: !root.submitted; }
                 if root.password-error != "": MutedText { text: root.password-error; color: Theme.danger; }
                 HorizontalLayout {
-                    Button { text: root.submitted ? @tr("Cancel") : @tr("Back"); clicked => { root.cancel-password(); } }
-                    Button { text: root.submitted ? @tr("Connecting…") : @tr("Connect"); primary: true; enabled: !root.submitted && (!root.needs-password || root.password != ""); clicked => { root.submit-password(); } }
+                    spacing: 8px;
+                    SystemButton { text: root.submitted ? @tr("Cancel") : @tr("Back"); clicked => { root.cancel-password(); } }
+                    SystemButton { text: root.submitted ? @tr("Connecting…") : @tr("Connect"); primary: true; enabled: !root.submitted && (!root.needs-password || root.password != ""); clicked => { root.submit-password(); } }
                 }
             }
         }
         if root.credential-id == "" && !SystemState.network-profile-editing && !root.asking-password: VerticalLayout {
-            spacing: Theme.default-spacing;
+            spacing: 12px;
             HorizontalLayout {
-                spacing: Theme.default-spacing;
+                spacing: 8px;
                 alignment: space-between;
                 if SystemState.network-active-name != "": Text {
                     text: SystemState.network-active-name;
                     color: Theme.text-primary;
-                    font-size: Theme.font-size-md;
-                    font-weight: 600;
+                    font-size: 13px;
+                    font-weight: 500;
                     overflow: elide;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
@@ -330,66 +436,113 @@ export component NetworkView inherits Rectangle {
                 if SystemState.network-active-name == "": Rectangle {
                     horizontal-stretch: 1;
                 }
-                if SystemState.network-has-wifi: Button {
+                if SystemState.network-has-wifi: SystemButton {
                     text: SystemState.network-scanning ? @tr("Scanning…") : @tr("Refresh");
                     enabled: SystemState.network-service-ready && SystemState.wifi-enabled && SystemState.wifi-hardware && SystemState.network-can-scan && !SystemState.network-scanning;
                     clicked => { SystemState.network-refresh(); }
                 }
             }
             if SystemState.network-status != "": MutedText { text: SystemState.network-status; }
-            if !root.full-mode && SystemState.network-service-ready && !SystemState.networking-enabled: Button { text: @tr("Enable networking"); enabled: SystemState.network-can-networking; clicked => { SystemState.networking-toggle(true); } }
-            if SystemState.network-portal: Button { enabled: SystemState.network-service-ready; text: @tr("Sign in to network"); clicked => { SystemState.network-open-portal(); } }
+            if !root.full-mode && SystemState.network-service-ready && !SystemState.networking-enabled: SystemButton { text: @tr("Enable networking"); enabled: SystemState.network-can-networking; clicked => { SystemState.networking-toggle(true); } }
+            if SystemState.network-portal: SystemButton { enabled: SystemState.network-service-ready; text: @tr("Sign in to network"); clicked => { SystemState.network-open-portal(); } }
             if root.full-mode: HorizontalLayout {
-                for title[index] in [@tr("Available networks"), @tr("Saved profiles")]: Button { text: title; primary: root.tab == index; clicked => { root.tab = index; } }
+                spacing: 8px;
+                Rectangle {
+                    height: 36px;
+                    border-radius: 8px;
+                    background: Theme.control-surface;
+                    border-width: 1px;
+                    border-color: Theme.control-border;
+                    HorizontalLayout {
+                        padding: 3px;
+                        spacing: 2px;
+                        for title[index] in [@tr("Available networks"), @tr("Saved profiles")]: Rectangle {
+                            min-width: 112px;
+                            height: 28px;
+                            border-radius: 5px;
+                            background: root.tab == index ? Theme.surface-active : ntab.has-hover ? Theme.surface-hover : transparent;
+                            border-width: root.tab == index ? 1px : 0px;
+                            border-color: Theme.border-highlight;
+                            animate background { duration: Theme.hover-duration * 1ms; easing: ease-out; }
+                            HorizontalLayout {
+                                padding-left: 12px; padding-right: 12px; alignment: center;
+                                Text {
+                                    text: title;
+                                    font-size: 12px;
+                                    font-weight: root.tab == index ? 500 : 400;
+                                    color: root.tab == index ? Theme.text-primary : Theme.text-secondary;
+                                    vertical-alignment: center;
+                                    horizontal-alignment: center;
+                                }
+                            }
+                            ntab := TouchArea { mouse-cursor: pointer; clicked => { root.tab = index; } }
+                        }
+                    }
+                }
                 Rectangle { horizontal-stretch: 1; }
-                Button { text: @tr("Check connection"); enabled: SystemState.network-service-ready; clicked => { SystemState.network-check-connectivity(); } }
+                VerticalLayout {
+                    alignment: center;
+                    SystemButton { text: @tr("Check connection"); enabled: SystemState.network-service-ready; clicked => { SystemState.network-check-connectivity(); } }
+                }
             }
             if root.full-mode && root.tab == 1: HorizontalLayout {
-                Button { text: @tr("Import connection…"); enabled: !SystemState.network-profile-busy; clicked => { root.importing = !root.importing; } }
+                SystemButton { text: @tr("Import connection…"); enabled: !SystemState.network-profile-busy; clicked => { root.importing = !root.importing; } }
+                Rectangle { horizontal-stretch: 1; }
             }
             if root.full-mode && root.importing: VerticalLayout {
-                spacing: Theme.default-spacing;
+                spacing: 8px;
                 MutedText { text: @tr("Import a NetworkManager connection or VPN provider file"); }
                 LineEdit { text <=> root.import-path; placeholder-text: @tr("Configuration file path"); enabled: !SystemState.network-profile-busy; }
                 ComboBox { model: ["OpenVPN", "WireGuard", "NetworkManager", "VPNC", "OpenConnect", "StrongSwan", "PPTP", "L2TP"]; current-index <=> root.import-kind; enabled: !SystemState.network-profile-busy; }
-                Button { text: SystemState.network-profile-busy ? @tr("Importing…") : @tr("Import"); enabled: root.import-path != "" && SystemState.network-service-ready && SystemState.network-can-edit && !SystemState.network-profile-busy; clicked => { root.import-submitted = true; SystemState.network-import-profile(root.import-path, root.import-kind == 1 ? "wireguard" : root.import-kind == 2 ? "keyfile" : root.import-kind == 3 ? "vpnc" : root.import-kind == 4 ? "openconnect" : root.import-kind == 5 ? "strongswan" : root.import-kind == 6 ? "pptp" : root.import-kind == 7 ? "l2tp" : "openvpn"); } }
+                HorizontalLayout {
+                    SystemButton { text: SystemState.network-profile-busy ? @tr("Importing…") : @tr("Import"); primary: true; enabled: root.import-path != "" && SystemState.network-service-ready && SystemState.network-can-edit && !SystemState.network-profile-busy; clicked => { root.import-submitted = true; SystemState.network-import-profile(root.import-path, root.import-kind == 1 ? "wireguard" : root.import-kind == 2 ? "keyfile" : root.import-kind == 3 ? "vpnc" : root.import-kind == 4 ? "openconnect" : root.import-kind == 5 ? "strongswan" : root.import-kind == 6 ? "pptp" : root.import-kind == 7 ? "l2tp" : "openvpn"); } }
+                    Rectangle { horizontal-stretch: 1; }
+                }
             }
             if SystemState.network-device-names.length > 2: ComboBox { model: SystemState.network-device-names; current-index: SystemState.network-device-index; selected(value) => { SystemState.network-select-device(self.current-index); } }
             LineEdit { text: SystemState.network-search; placeholder-text: @tr("Search networks"); edited(value) => { SystemState.network-search-changed(value); } }
             ScrollArea {
                 min-height: root.full-mode ? networks.preferred-height : 0px; vertical-stretch: root.full-mode ? 0 : 1; content-height: networks.preferred-height;
                 networks := VerticalLayout {
-                    x: 0px; y: 0px; width: parent.content-width; height: self.preferred-height; spacing: Theme.default-spacing; alignment: start;
+                    x: 0px; y: 0px; width: parent.content-width; height: self.preferred-height; spacing: 8px; alignment: start;
                     if SystemState.network-error != "": VerticalLayout {
+                        spacing: 8px;
                         MutedText { text: SystemState.network-error; color: Theme.danger; }
-                        Button { text: @tr("Dismiss"); clicked => { SystemState.network-reset-error(); } }
+                        HorizontalLayout {
+                            SystemButton { text: @tr("Dismiss"); clicked => { SystemState.network-reset-error(); } }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
                     }
                     for row in (root.full-mode && root.tab == 1 ? SystemState.network-profiles : SystemState.networks): Rectangle {
                         height: details.preferred-height; vertical-stretch: 0;
-                        background: row.active ? Theme.surface-active : Theme.control-surface;
-                        border-width: 1px; border-color: Theme.control-border; border-radius: Theme.radius-md;
+                        background: row.active ? Theme.surface-active.with-alpha(0.55) : Theme.control-surface;
+                        border-width: 1px; border-color: row.active ? Theme.accent.with-alpha(0.35) : Theme.control-border; border-radius: 8px;
                         details := VerticalLayout {
-                            padding: Theme.spacing-lg; spacing: Theme.default-spacing;
+                            padding: 12px; spacing: 10px;
                             HorizontalLayout {
-                                spacing: Theme.spacing-lg;
-                                Image { source: row.icon; width: Theme.icon-size-lg; height: Theme.icon-size-lg; image-fit: contain; colorize: Theme.text-primary; }
+                                spacing: 12px;
                                 VerticalLayout {
-                                    horizontal-stretch: 1; spacing: Theme.spacing-xs;
-                                    Text { text: row.name; color: Theme.text-primary; font-weight: 600; font-size: Theme.font-size-md; wrap: word-wrap; }
-                                    MutedText { text: row.detail; font-size: Theme.font-size-sm; }
+                                    alignment: center;
+                                    Image { source: row.icon; width: 20px; height: 20px; image-fit: contain; colorize: row.active ? Theme.text-primary : Theme.text-secondary; }
+                                }
+                                VerticalLayout {
+                                    horizontal-stretch: 1; spacing: 2px;
+                                    Text { text: row.name; color: Theme.text-primary; font-weight: 500; font-size: 13px; wrap: word-wrap; }
+                                    MutedText { text: row.detail; font-size: 12px; }
                                 }
                             }
                             if row.error != "": MutedText { text: row.error; color: Theme.danger; }
                             HorizontalLayout {
-                                spacing: Theme.default-spacing;
-                                if root.full-mode && row.saved: Button { text: @tr("Forget"); enabled: !row.busy && row.editable; clicked => { root.forget-target = row.path; } }
+                                spacing: 8px;
+                                if root.full-mode && row.saved: SystemButton { text: @tr("Forget"); destructive: true; enabled: !row.busy && row.editable; clicked => { root.forget-target = row.path; } }
                                 if root.full-mode || row.security == "enterprise" || row.security == "wep": IconButton {
                                     icon: Icons.configure; accessible-label: @tr("Edit network profile");
                                     clicked => { if root.full-mode { SystemState.network-edit-profile(row.path); } else { SystemState.open-settings("network:" + row.path); } }
                                 }
                                 Rectangle { horizontal-stretch: 1; }
-                                Button {
+                                SystemButton {
                                     text: row.active ? @tr("Disconnect") : row.busy ? @tr("Cancel") : row.supported ? @tr("Connect") : @tr("Configure");
+                                    primary: !row.active && !row.busy && row.supported;
                                     enabled: SystemState.network-service-ready && (row.busy || (!row.supported && SystemState.network-can-edit) || (SystemState.network-can-connect && (row.active || (row.supported && SystemState.networking-enabled && (row.wired || (SystemState.wifi-enabled && SystemState.wifi-hardware))))));
                                     clicked => {
                                         if row.active { SystemState.network-disconnect(row.path); }
@@ -401,10 +554,12 @@ export component NetworkView inherits Rectangle {
                                 }
                             }
                             if root.forget-target == row.path: VerticalLayout {
+                                spacing: 8px;
                                 MutedText { text: row.active ? @tr("Forget this profile and disconnect?") : @tr("Forget this saved network?"); }
                                 HorizontalLayout {
-                                    Button { text: @tr("Cancel"); clicked => { root.forget-target = ""; } }
-                                    Button { text: @tr("Delete"); clicked => { SystemState.network-forget(row.path); root.forget-target = ""; } }
+                                    spacing: 8px;
+                                    SystemButton { text: @tr("Cancel"); clicked => { root.forget-target = ""; } }
+                                    SystemButton { text: @tr("Delete"); destructive: true; clicked => { SystemState.network-forget(row.path); root.forget-target = ""; } }
                                 }
                             }
                         }
@@ -413,11 +568,12 @@ export component NetworkView inherits Rectangle {
                 }
             }
             if root.full-mode: HorizontalLayout {
-                spacing: Theme.default-spacing;
-                Button { text: @tr("Add network"); clicked => { SystemState.network-new-profile("802-11-wireless"); } }
-                Button { text: @tr("Hidden network"); clicked => { SystemState.network-new-profile("hidden"); } }
-                Button { text: @tr("Hotspot"); clicked => { SystemState.network-new-profile("hotspot"); } }
-                Button { text: @tr("VPN / mobile"); clicked => { SystemState.network-new-profile("vpn"); } }
+                spacing: 8px;
+                SystemButton { text: @tr("Add network"); clicked => { SystemState.network-new-profile("802-11-wireless"); } }
+                SystemButton { text: @tr("Hidden network"); clicked => { SystemState.network-new-profile("hidden"); } }
+                SystemButton { text: @tr("Hotspot"); clicked => { SystemState.network-new-profile("hotspot"); } }
+                SystemButton { text: @tr("VPN / mobile"); clicked => { SystemState.network-new-profile("vpn"); } }
+                Rectangle { horizontal-stretch: 1; }
             }
         }
     }

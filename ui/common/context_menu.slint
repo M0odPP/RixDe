@@ -43,12 +43,13 @@ export component MenuSurface inherits Rectangle {
     in property <bool> material-supported: true;
     in property <bool> opaque;
     in property <bool> blur-local-content;
+    in property <length> surface-radius: Theme.context-menu-radius;
     private property <bool> glass: root.material-supported && !root.opaque && Theme.is-aero && (!root.blur-local-content || DialogBackdrop.ready);
 
     private property <bool> framed: Theme.menu-frame.available;
 
     background: root.glass ? root.framed ? transparent : @linear-gradient(180deg, Theme.glass-start 0%, Theme.glass-end 100%) : Theme.menu-bg.with-alpha(1);
-    border-radius: Theme.context-menu-radius;
+    border-radius: root.surface-radius;
     border-width: root.framed ? 0px : 1px;
     border-color: Theme.border-highlight;
     clip: true;
@@ -57,7 +58,7 @@ export component MenuSurface inherits Rectangle {
         height: parent.height;
         skin: Theme.menu-frame;
         material-opacity: Theme.material-opacity;
-        corner-radius: Theme.context-menu-radius;
+        corner-radius: root.surface-radius;
     }
 }
 
@@ -105,14 +106,14 @@ export component MenuRow inherits Rectangle {
         if root.has-icon || root.checked || root.checkable: Rectangle {
             width: Theme.icon-size-sm;
             horizontal-stretch: 0;
-            if root.checked && !root.radio: Text {
-                width: parent.width;
-                height: parent.height;
-                text: "✓";
-                color: Theme.accent;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            if root.checked && !root.radio: Image {
+                width: 13px;
+                height: 13px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                source: Icons.check;
+                colorize: Theme.accent;
+                image-fit: contain;
             }
             if root.checked && root.radio: Rectangle {
                 width: Theme.icon-size-sm / 2;

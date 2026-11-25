@@ -1,8 +1,6 @@
-import { Theme } from "../../../ui/common/theme.slint";
-import { Icons } from "../../../ui/common/icons.slint";
-import { Button } from "std-widgets.slint";
 import { ComboBox } from "../../../ui/common/combo_box.slint";
-import { SettingsCard, SettingsRow, SettingsDivider } from "card.slint";
+import { SettingsTokens, SettingsIcons } from "tokens.slint";
+import { SettingsCard, SettingsRow } from "card.slint";
 import { BehaviorSettings } from "behavior.slint";
 
 export struct LanguageChoice {
@@ -21,59 +19,101 @@ export global LanguageSettings {
 export component LanguageView inherits Rectangle {
     background: transparent;
     preferred-height: content.preferred-height;
+    vertical-stretch: 0;
+
     content := VerticalLayout {
+        alignment: start;
         spacing: 16px;
 
         SettingsCard {
             title: @tr("Display language");
-            subtitle: @tr("Choose the interface language for RixDE and desktop applications");
+            subtitle: @tr("Interface language for RixDE and newly launched applications");
 
-            for choice in LanguageSettings.choices: Rectangle {
-                min-height: 58px;
-                border-radius: Theme.radius-sm;
-                border-width: LanguageSettings.selected == choice.id ? 1.5px : 1px;
-                border-color: LanguageSettings.selected == choice.id ? Theme.accent : Theme.border;
-                background: LanguageSettings.selected == choice.id ? Theme.surface-active : touch.has-hover ? Theme.surface-hover : Theme.surface;
+            VerticalLayout {
+                spacing: 8px;
+                for choice in LanguageSettings.choices: Rectangle {
+                    min-height: 56px;
+                    border-radius: SettingsTokens.radius-md;
+                    border-width: 1px;
+                    border-color: LanguageSettings.selected == choice.id ? SettingsTokens.accent-border : SettingsTokens.border;
+                    background: LanguageSettings.selected == choice.id ? SettingsTokens.bg-raised
+                        : touch.has-hover ? SettingsTokens.bg-hover-subtle : SettingsTokens.bg-stage;
+                    animate background { duration: SettingsTokens.duration-fast; easing: ease-out; }
+                    animate border-color { duration: SettingsTokens.duration-fast; easing: ease-out; }
 
-                HorizontalLayout {
-                    padding: 12px; spacing: 14px;
+                    HorizontalLayout {
+                        padding-left: 16px;
+                        padding-right: 16px;
+                        padding-top: 10px;
+                        padding-bottom: 10px;
+                        spacing: 12px;
 
-                    VerticalLayout {
-                        alignment: center; spacing: 2px; horizontal-stretch: 1;
-                        Text { text: choice.name; color: Theme.text-primary; font-size: 14px; font-weight: 600; }
-                        Text { text: choice.detail; color: Theme.text-secondary; font-size: 12px; wrap: word-wrap; }
-                    }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 2px;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: choice.name;
+                                color: SettingsTokens.text-primary;
+                                font-size: SettingsTokens.text-md;
+                                font-weight: 500;
+                            }
+                            Text {
+                                text: choice.detail;
+                                color: SettingsTokens.text-secondary;
+                                font-size: SettingsTokens.text-sm;
+                                wrap: word-wrap;
+                            }
+                        }
 
-                    if LanguageSettings.selected == choice.id: VerticalLayout {
-                        horizontal-stretch: 0; alignment: center;
-                        Rectangle {
-                            width: 24px; height: 24px; border-radius: 12px;
-                            background: Theme.accent.with-alpha(0.16);
-                            Image { source: Icons.check; x: 3px; y: 3px; width: 18px; height: 18px; colorize: Theme.accent; }
+                        VerticalLayout {
+                            horizontal-stretch: 0;
+                            alignment: center;
+                            if LanguageSettings.selected == choice.id: Rectangle {
+                                width: 20px;
+                                height: 20px;
+                                border-radius: 10px;
+                                background: SettingsTokens.accent-subtle;
+                                Image {
+                                    source: SettingsIcons.check;
+                                    x: 3px;
+                                    y: 3px;
+                                    width: 14px;
+                                    height: 14px;
+                                    colorize: SettingsTokens.accent;
+                                    image-fit: contain;
+                                }
+                            }
                         }
                     }
+
+                    touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { LanguageSettings.choose(choice.id); }
+                    }
                 }
-                touch := TouchArea { clicked => { LanguageSettings.choose(choice.id); } }
             }
         }
 
         SettingsCard {
-            title: @tr("Regional standards and calendar");
-            subtitle: @tr("Date formats and first day of the week");
+            title: @tr("Calendar and region");
 
             SettingsRow {
                 title: @tr("First day of the week");
-                subtitle: @tr("Starting day displayed in calendar widgets and clock");
+                subtitle: @tr("Starting column in calendar popups");
                 ComboBox {
                     model: [@tr("Monday"), @tr("Tuesday"), @tr("Wednesday"), @tr("Thursday"), @tr("Friday"), @tr("Saturday"), @tr("Sunday")];
                     current-index <=> BehaviorSettings.week-start;
-                    min-width: 195px;
+                    min-width: 208px;
                 }
             }
         }
 
         if LanguageSettings.status != "": Text {
-            text: LanguageSettings.status; color: Theme.text-secondary; wrap: word-wrap;
+            text: LanguageSettings.status;
+            color: SettingsTokens.text-secondary;
+            font-size: SettingsTokens.text-sm;
+            wrap: word-wrap;
         }
     }
 }
