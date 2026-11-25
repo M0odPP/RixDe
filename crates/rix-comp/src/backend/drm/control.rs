@@ -30,12 +30,7 @@ impl OutputControl {
         &mut self,
         state: &mut RixState,
         outputs: &mut [ConnectedOutput],
-        manager: &DrmOutputManager<
-            GbmAllocator<DrmDeviceFd>,
-            GbmFramebufferExporter<DrmDeviceFd>,
-            (),
-            DrmDeviceFd,
-        >,
+        gpu_devices: &std::collections::HashMap<DrmNode, GpuDevice>,
         active: bool,
     ) {
         let now = Instant::now();
@@ -50,15 +45,17 @@ impl OutputControl {
                     && output.pending_submission.is_none()
                     && now >= self.retry_at
                 {
-                    match outputs::apply_profile(manager, output, trial.previous.clone()) {
-                        Ok(()) => {
-                            info!(output = %output.output.name(), "Unconfirmed display mode reverted");
-                            self.trial = None;
-                            outputs::arrange_outputs(state, outputs);
-                        }
-                        Err(error) => {
-                            warn!(%error, "Could not restore display mode; retrying");
-                            self.retry_at = now + Duration::from_secs(1);
+                    if let Some(gpu) = gpu_devices.get(&output.node) {
+                        match outputs::apply_profile(&gpu.output_manager.borrow(), output, trial.previous.clone()) {
+                            Ok(()) => {
+                                info!(output = %output.output.name(), "Unconfirmed display mode reverted");
+                                self.trial = None;
+                                outputs::arrange_outputs(state, outputs);
+                            }
+                            Err(error) => {
+                                warn!(%error, "Could not restore display mode; retrying");
+                                self.retry_at = now + Duration::from_secs(1);
+                            }
                         }
                     }
                 }
@@ -102,7 +99,13 @@ impl OutputControl {
                                 .send(Err("Output has no active mode".into()));
                             continue;
                         };
-                        match outputs::apply_profile(manager, output, profile.clone()) {
+                        let manager_opt = gpu_devices.get(&output.node);
+                        let apply_res = if let Some(gpu) = manager_opt {
+                            outputs::apply_profile(&gpu.output_manager.borrow(), output, profile.clone())
+                        } else {
+                            Err(anyhow::anyhow!("GPU device for output not found"))
+                        };
+                        match apply_res {
                             Ok(()) => {
                                 self.required_presentation = output.presentations.wrapping_add(1);
                                 self.next_id = self.next_id.wrapping_add(1);

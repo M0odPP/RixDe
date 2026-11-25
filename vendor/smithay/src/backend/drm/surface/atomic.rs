@@ -810,25 +810,27 @@ impl AtomicDrmSurface {
         };
 
         debug!("Setting screen: {:?}", req);
+        let built_req = req.build()?;
         let result = self
             .fd
             .atomic_commit(
                 if event {
-                    // on the atomic api we can modeset and trigger a page_flip event on the same call!
-                    AtomicCommitFlags::PAGE_FLIP_EVENT | AtomicCommitFlags::ALLOW_MODESET
-                    // we also *should* not need to wait for completion, like with `set_crtc`,
-                    // because we have tested this exact commit already, so we do not expect any errors later down the line.
-                    //
-                    // but there is always an exception and `amdgpu` can fail in interesting ways with this flag set...
-                    // https://gitlab.freedesktop.org/drm/amd/-/issues?scope=all&utf8=%E2%9C%93&state=opened&search=drm_atomic_helper_wait_for_flip_done
-                    //
-                    // so we skip this flag:
-                    // AtomicCommitFlags::Nonblock,
+                    AtomicCommitFlags::PAGE_FLIP_EVENT | AtomicCommitFlags::ALLOW_MODESET | AtomicCommitFlags::NONBLOCK
                 } else {
-                    AtomicCommitFlags::ALLOW_MODESET
+                    AtomicCommitFlags::ALLOW_MODESET | AtomicCommitFlags::NONBLOCK
                 },
-                req.build()?,
+                built_req.clone(),
             )
+            .or_else(|_| {
+                self.fd.atomic_commit(
+                    if event {
+                        AtomicCommitFlags::PAGE_FLIP_EVENT | AtomicCommitFlags::ALLOW_MODESET
+                    } else {
+                        AtomicCommitFlags::ALLOW_MODESET
+                    },
+                    built_req,
+                )
+            })
             .map_err(|source| {
                 Error::Access(AccessError {
                     errmsg: "Error setting crtc",

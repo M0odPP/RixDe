@@ -221,7 +221,7 @@ impl RixState {
         }
         if !registered {
             let location = self.initial_window_location(&window);
-            self.space.map_element(window.clone(), location, true);
+            self.space.map_element(window.clone(), location, false);
 
             self.space.refresh();
             self.windows.lifecycle.next_id += 1;

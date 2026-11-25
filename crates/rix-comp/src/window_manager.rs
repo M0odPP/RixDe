@@ -389,8 +389,16 @@ impl RixState {
         if self.space.element_location(&window).is_none() {
             return;
         }
-        self.space.raise_element(&window, true);
+        self.space.raise_element(&window, false);
 
+        for other in self.space.elements() {
+            if other != &window {
+                other.set_activated(false);
+                if let Some(surface) = other.toplevel() {
+                    surface.send_pending_configure();
+                }
+            }
+        }
         let previous = self.windows.active.and_then(|previous_id| {
             self.windows
                 .entries
@@ -399,17 +407,13 @@ impl RixState {
                 .map(|(_, window)| window.clone())
         });
         if let Some(previous) = previous.filter(|previous| previous != &window) {
+            previous.set_activated(false);
             if let Some(surface) = previous.toplevel() {
-                if previous.set_activated(false) {
-                    surface.send_configure();
-                }
+                surface.send_pending_configure();
             }
         }
-        if window.set_activated(true) {
-            if let Some(surface) = window.toplevel() {
-                surface.send_configure();
-            }
-        }
+        window.set_activated(true);
+        toplevel.send_pending_configure();
         if let Some(keyboard) = self.seat.get_keyboard() {
             keyboard.set_focus(
                 self,
@@ -484,7 +488,7 @@ impl RixState {
             WindowAction::Focus(_) => {
                 self.dismiss_popup_for_activation();
                 if let Some(location) = self.windows.minimized.remove(&id) {
-                    self.space.map_element(window.clone(), location, true);
+                    self.space.map_element(window.clone(), location, false);
                     self.space.refresh();
                 }
                 self.focus_window(&window);

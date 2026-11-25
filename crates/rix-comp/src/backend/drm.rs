@@ -42,10 +42,12 @@ use smithay::{
     utils::{DeviceFd, Point, Size, Transform},
     wayland::socket::ListeningSocketSource,
 };
+use smithay::backend::allocator::format::FormatSet;
+use smithay::backend::allocator::Modifier;
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::os::unix::io::OwnedFd;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -54,9 +56,24 @@ use tracing::{info, warn};
 
 type HardwareOutput =
     DrmOutput<GbmAllocator<DrmDeviceFd>, GbmFramebufferExporter<DrmDeviceFd>, (), DrmDeviceFd>;
+pub(crate) type HardwareOutputManager =
+    DrmOutputManager<GbmAllocator<DrmDeviceFd>, GbmFramebufferExporter<DrmDeviceFd>, (), DrmDeviceFd>;
 type SessionHandler = Box<dyn FnMut(SessionEvent, &mut RixState)>;
 
+#[allow(dead_code)]
+pub(crate) struct GpuDevice {
+    pub node: DrmNode,
+    pub dev_id: libc::dev_t,
+    pub path: PathBuf,
+    pub gbm: GbmDevice<DrmDeviceFd>,
+    pub output_manager: Rc<RefCell<HardwareOutputManager>>,
+    pub is_primary: bool,
+    pub _drm_events: RegisteredDrmEvents,
+}
+
 struct ConnectedOutput {
+    node: DrmNode,
+    is_primary: bool,
     output: Output,
     crtc: crtc::Handle,
     connector: connector::Handle,
@@ -91,9 +108,9 @@ impl ConnectedOutput {
     }
 }
 
-struct RegisteredDrmEvents {
-    handle: smithay::reexports::calloop::LoopHandle<'static, RixState>,
-    token: smithay::reexports::calloop::RegistrationToken,
+pub(crate) struct RegisteredDrmEvents {
+    pub handle: smithay::reexports::calloop::LoopHandle<'static, RixState>,
+    pub token: smithay::reexports::calloop::RegistrationToken,
 }
 impl Drop for RegisteredDrmEvents {
     fn drop(&mut self) {
@@ -106,6 +123,137 @@ render_elements! {
     Space=crate::render::SceneElement,
     CursorSurface=smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement<GlesRenderer>,
     Texture=TextureRenderElement<GlesTexture>,
+}
+
+fn handle_vblank_event(output: &mut ConnectedOutput, state: &mut RixState) {
+    if output.frame_queued {
+        let submitted = match output.drm_output.frame_submitted() {
+            Ok(Some(_)) => {
+                output.presentations = output.presentations.wrapping_add(1);
+                output.recovery.presented(Instant::now());
+                true
+            }
+            Ok(None) => {
+                warn!(?output.crtc, output = %output.output.name(), "Page flip has no pending frame");
+                false
+            }
+            Err(err) => {
+                warn!(
+                    ?output.crtc,
+                    output = %output.output.name(),
+                    %err,
+                    "Could not release submitted frame"
+                );
+                output.drm_output.reset_buffers();
+                false
+            }
+        };
+        output.frame_queued = false;
+        output.queued_at = None;
+        if let Some(generation) = output.queued_lock_generation.take() {
+            if submitted {
+                state.lock_frame_presented(&output.output, generation);
+            }
+        }
+    }
+}
+
+fn init_secondary_gpu(
+    session: &mut LibSeatSession,
+    handle: &smithay::reexports::calloop::LoopHandle<'static, RixState>,
+    outputs_for_vblank: &Rc<RefCell<Vec<ConnectedOutput>>>,
+    render_formats: &FormatSet,
+    node: DrmNode,
+    dev_id: libc::dev_t,
+    path: &Path,
+) -> anyhow::Result<GpuDevice> {
+    info!("Initializing secondary GPU: {:?} at '{}'", node, path.display());
+    let owned: OwnedFd = session
+        .open(
+            path,
+            OFlags::RDWR | OFlags::CLOEXEC | OFlags::NOCTTY | OFlags::NONBLOCK,
+        )
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "Failed to open secondary DRM device '{}' via libseat: {:?}",
+                path.display(),
+                err
+            )
+        })?;
+    let drm_fd = DrmDeviceFd::new(DeviceFd::from(owned));
+    let (drm_device, drm_notifier) = DrmDevice::new(drm_fd.clone(), true).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to initialize DrmDevice on secondary GPU '{}': {}",
+            path.display(),
+            err
+        )
+    })?;
+    let gbm = GbmDevice::new(drm_fd).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to initialize GBM on secondary GPU '{}': {}",
+            path.display(),
+            err
+        )
+    })?;
+    let secondary_allocator = GbmAllocator::new(
+        gbm.clone(),
+        GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT,
+    );
+    let render_node = node.node_with_type(NodeType::Render).and_then(Result::ok);
+    let framebuffer_exporter = GbmFramebufferExporter::new(gbm.clone(), render_node);
+    let linear_formats: Vec<_> = render_formats
+        .iter()
+        .filter(|f| f.modifier == Modifier::Linear)
+        .copied()
+        .collect();
+    let secondary_formats = if linear_formats.is_empty() {
+        render_formats.iter().copied().collect::<Vec<_>>()
+    } else {
+        linear_formats
+    };
+    let output_manager = DrmOutputManager::new(
+        drm_device,
+        secondary_allocator,
+        framebuffer_exporter,
+        Some(gbm.clone()),
+        [Fourcc::Abgr8888, Fourcc::Argb8888],
+        secondary_formats,
+    );
+    let outputs = Rc::downgrade(outputs_for_vblank);
+    let vblank_token = handle
+        .insert_source(drm_notifier, move |event, _, state: &mut RixState| {
+            let Some(outputs) = outputs.upgrade() else {
+                return;
+            };
+            match event {
+                DrmEvent::VBlank(crtc) => {
+                    if let Some(output) = outputs
+                        .borrow_mut()
+                        .iter_mut()
+                        .find(|output| output.node == node && output.crtc == crtc)
+                    {
+                        handle_vblank_event(output, state);
+                    }
+                }
+                DrmEvent::Error(err) => {
+                    warn!(?node, "Secondary DRM device error: {}", err);
+                }
+            }
+        })
+        .map_err(|e| anyhow::anyhow!("Failed to register secondary DRM notifier: {:?}", e))?;
+
+    Ok(GpuDevice {
+        node,
+        dev_id,
+        path: path.to_path_buf(),
+        gbm,
+        output_manager: Rc::new(RefCell::new(output_manager)),
+        is_primary: false,
+        _drm_events: RegisteredDrmEvents {
+            handle: handle.clone(),
+            token: vblank_token,
+        },
+    })
 }
 
 pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> anyhow::Result<()> {
@@ -296,6 +444,7 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
     info!("Registered zwp_linux_dmabuf_v1 global for hardware accelerated GPU buffer sharing");
 
     mark(heartbeat.as_ref(), Phase::OutputInitialization);
+    let handle = event_loop.handle();
     let render_formats = renderer.egl_context().dmabuf_render_formats().clone();
     let render_node = primary_gpu_node
         .node_with_type(NodeType::Render)
@@ -303,29 +452,112 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
     let framebuffer_exporter = GbmFramebufferExporter::new(gbm.clone(), render_node);
     let output_manager = DrmOutputManager::new(
         drm_device,
-        allocator,
+        allocator.clone(),
         framebuffer_exporter,
-        Some(gbm),
+        Some(gbm.clone()),
         [Fourcc::Abgr8888, Fourcc::Argb8888],
         render_formats.iter().copied(),
     );
-    let output_manager = Rc::new(RefCell::new(output_manager));
-    let mut outputs = Vec::new();
+    let outputs: Rc<RefCell<Vec<ConnectedOutput>>> = Rc::new(RefCell::new(Vec::new()));
+    let outputs_for_vblank = Rc::downgrade(&outputs);
+    let primary_node = primary_gpu_node;
+    let drm_events = handle
+        .insert_source(drm_notifier, move |event, _, state: &mut RixState| {
+            let Some(outputs_for_vblank) = outputs_for_vblank.upgrade() else {
+                return;
+            };
+            match event {
+                DrmEvent::VBlank(crtc) => {
+                    if let Some(output) = outputs_for_vblank
+                        .borrow_mut()
+                        .iter_mut()
+                        .find(|output| output.node == primary_node && output.crtc == crtc)
+                    {
+                        handle_vblank_event(output, state);
+                    }
+                }
+                DrmEvent::Error(err) => {
+                    warn!(?primary_node, "Primary DRM device error: {}", err);
+                }
+            }
+        })
+        .map_err(|e| anyhow::anyhow!("Failed to register primary DRM notifier: {:?}", e))?;
+
+    let primary_gpu_dev = GpuDevice {
+        node: primary_gpu_node,
+        dev_id: primary_gpu_node.dev_id(),
+        path: gpu_path.clone(),
+        gbm: gbm.clone(),
+        output_manager: Rc::new(RefCell::new(output_manager)),
+        is_primary: true,
+        _drm_events: RegisteredDrmEvents {
+            handle: handle.clone(),
+            token: drm_events,
+        },
+    };
+    let gpu_devices: Rc<RefCell<HashMap<DrmNode, GpuDevice>>> =
+        Rc::new(RefCell::new(HashMap::new()));
+    gpu_devices.borrow_mut().insert(primary_gpu_node, primary_gpu_dev);
+
+    let udev_backend = UdevBackend::new(&seat_name).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to initialize udev monitor on seat '{}': {}",
+            seat_name,
+            e
+        )
+    })?;
+    for (device_id, path) in udev_backend.device_list() {
+        info!(
+            "udev: tracking DRM device #{} at '{}'",
+            device_id,
+            path.display()
+        );
+        if device_id != primary_gpu_node.dev_id() {
+            if let Ok(node) = DrmNode::from_path(&path) {
+                if node.ty() == NodeType::Primary {
+                    match init_secondary_gpu(
+                        &mut session,
+                        &handle,
+                        &outputs,
+                        &render_formats,
+                        node,
+                        device_id,
+                        &path,
+                    ) {
+                        Ok(gpu) => {
+                            gpu_devices.borrow_mut().insert(node, gpu);
+                        }
+                        Err(err) => {
+                            warn!(
+                                "Failed to initialize secondary GPU at '{}': {}",
+                                path.display(),
+                                err
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut retired_globals = Vec::new();
-    outputs::reconcile_outputs(
-        &mut output_manager.borrow_mut(),
-        &display,
-        &mut state,
-        &mut renderer,
-        &mut outputs,
-        &mut retired_globals,
-        &config.get_display(),
-    );
-    if outputs.is_empty() {
+    for (node, gpu) in gpu_devices.borrow().iter() {
+        outputs::reconcile_outputs(
+            *node,
+            gpu.is_primary,
+            &mut gpu.output_manager.borrow_mut(),
+            &display,
+            &mut state,
+            &mut renderer,
+            &mut outputs.borrow_mut(),
+            &mut retired_globals,
+            &config.get_display(),
+        );
+    }
+    if outputs.borrow().is_empty() {
         warn!("No usable outputs yet; waiting for a connector event");
     }
-    let output_count = outputs.len();
-    let outputs = Rc::new(RefCell::new(outputs));
+    let output_count = outputs.borrow().len();
 
     let mut wallpapers = super::wallpaper::Wallpapers::default();
     let mut cursor = super::cursor::CursorRenderer::new(&config.get_theme());
@@ -363,8 +595,6 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
     }
     std::env::set_var("RIX_NATIVE_SESSION", "1");
 
-    let handle = event_loop.handle();
-
     let mut libinput_context =
         Libinput::new_with_udev(LibinputSessionInterface::from(session.clone()));
     libinput_context
@@ -374,13 +604,13 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
     let outputs_dirty = Rc::new(Cell::new(false));
     let outputs_dirty_for_session = outputs_dirty.clone();
     let active_for_session = active.clone();
-    let output_manager_for_session = Rc::downgrade(&output_manager);
+    let gpu_devices_for_session = Rc::downgrade(&gpu_devices);
     let outputs_for_session = Rc::downgrade(&outputs);
     let mut paused_focus = None;
     let mut libinput_for_session = libinput_context.clone();
     *session_handler.borrow_mut() = Some(Box::new(move |event, state: &mut RixState| {
-        let (Some(output_manager_for_session), Some(outputs_for_session)) = (
-            output_manager_for_session.upgrade(),
+        let (Some(gpu_devices_for_session), Some(outputs_for_session)) = (
+            gpu_devices_for_session.upgrade(),
             outputs_for_session.upgrade(),
         ) else {
             return;
@@ -388,9 +618,10 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
         match event {
             SessionEvent::ActivateSession => {
                 info!("libseat: session activated, resuming DRM and libinput");
-                if let Err(err) = output_manager_for_session.borrow_mut().activate(false) {
-                    warn!("Failed to re-activate DRM device: {}", err);
-                    return;
+                for (node, gpu) in gpu_devices_for_session.borrow_mut().iter_mut() {
+                    if let Err(err) = gpu.output_manager.borrow_mut().activate(false) {
+                        warn!(?node, "Failed to re-activate DRM device: {}", err);
+                    }
                 }
                 for output in outputs_for_session.borrow_mut().iter_mut() {
                     reset_output(output);
@@ -423,93 +654,84 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
                     .and_then(|keyboard| keyboard.current_focus());
                 state.cancel_input();
                 libinput_for_session.suspend();
-                output_manager_for_session.borrow_mut().pause();
+                for (_node, gpu) in gpu_devices_for_session.borrow_mut().iter_mut() {
+                    gpu.output_manager.borrow_mut().pause();
+                }
             }
         }
     }));
 
-    let outputs_for_vblank = Rc::downgrade(&outputs);
-    let drm_events = handle
-        .insert_source(drm_notifier, move |event, _, state: &mut RixState| {
-            let Some(outputs_for_vblank) = outputs_for_vblank.upgrade() else {
-                return;
-            };
-            match event {
-                DrmEvent::VBlank(crtc) => {
-                    if let Some(output) = outputs_for_vblank
-                        .borrow_mut()
-                        .iter_mut()
-                        .find(|output| output.crtc == crtc)
-                    {
-                        if output.frame_queued {
-                            let submitted = match output.drm_output.frame_submitted() {
-                                Ok(Some(_)) => {
-                                    output.presentations = output.presentations.wrapping_add(1);
-                                    output.recovery.presented(Instant::now());
-                                    true
-                                }
-                                Ok(None) => {
-                                    warn!(?crtc, "Page flip has no pending frame");
-                                    false
-                                }
-                                Err(err) => {
-                                    warn!(?crtc, "Could not release submitted frame: {err}");
-                                    output.drm_output.reset_buffers();
-                                    false
-                                }
-                            };
-                            output.frame_queued = false;
-                            output.queued_at = None;
-                            if let Some(generation) = output.queued_lock_generation.take() {
-                                if submitted {
-                                    state.lock_frame_presented(&output.output, generation);
+    let outputs_dirty_for_udev = outputs_dirty.clone();
+    let primary_id = primary_gpu_node.dev_id();
+    let gpu_devices_for_udev = Rc::downgrade(&gpu_devices);
+    let mut session_for_udev = session.clone();
+    let handle_for_udev = handle.clone();
+    let outputs_for_udev = Rc::downgrade(&outputs);
+    let render_formats_for_udev = render_formats.clone();
+    handle
+        .insert_source(
+            udev_backend,
+            move |event, _, state: &mut RixState| match event {
+                UdevEvent::Added { device_id, path } => {
+                    if device_id == primary_id {
+                        outputs_dirty_for_udev.set(true);
+                    } else if let (Some(gpus), Some(outputs)) = (
+                        gpu_devices_for_udev.upgrade(),
+                        outputs_for_udev.upgrade(),
+                    ) {
+                        if let Ok(node) = DrmNode::from_path(&path) {
+                            if node.ty() == NodeType::Primary
+                                && !gpus.borrow().contains_key(&node)
+                            {
+                                match init_secondary_gpu(
+                                    &mut session_for_udev,
+                                    &handle_for_udev,
+                                    &outputs,
+                                    &render_formats_for_udev,
+                                    node,
+                                    device_id,
+                                    &path,
+                                ) {
+                                    Ok(gpu) => {
+                                        gpus.borrow_mut().insert(node, gpu);
+                                        outputs_dirty_for_udev.set(true);
+                                    }
+                                    Err(err) => {
+                                        warn!(
+                                            "Failed to initialize hotplugged secondary GPU at '{}': {}",
+                                            path.display(),
+                                            err
+                                        );
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                DrmEvent::Error(err) => {
-                    warn!("DRM device error: {}", err);
+                UdevEvent::Changed { device_id } => {
+                    if let Some(gpus) = gpu_devices_for_udev.upgrade() {
+                        if gpus.borrow().values().any(|g| g.dev_id == device_id) {
+                            outputs_dirty_for_udev.set(true);
+                        }
+                    }
                 }
-            }
-        })
-        .map_err(|e| anyhow::anyhow!("Failed to register DRM notifier: {:?}", e))?;
-
-    let _drm_events = RegisteredDrmEvents {
-        handle: handle.clone(),
-        token: drm_events,
-    };
-
-    let udev_backend = UdevBackend::new(&seat_name).map_err(|e| {
-        anyhow::anyhow!(
-            "Failed to initialize udev monitor on seat '{}': {}",
-            seat_name,
-            e
-        )
-    })?;
-    for (device_id, path) in udev_backend.device_list() {
-        info!(
-            "udev: tracking DRM device #{} at '{}'",
-            device_id,
-            path.display()
-        );
-    }
-    let outputs_dirty_for_udev = outputs_dirty.clone();
-    let primary_id = primary_gpu_node.dev_id();
-    handle
-        .insert_source(
-            udev_backend,
-            move |event, _, state: &mut RixState| match event {
-                UdevEvent::Added { device_id, .. } | UdevEvent::Changed { device_id }
-                    if device_id == primary_id =>
-                {
-                    outputs_dirty_for_udev.set(true)
+                UdevEvent::Removed { device_id } => {
+                    if device_id == primary_id {
+                        warn!("Primary DRM device removed; ending session");
+                        state.running.store(false, Ordering::SeqCst);
+                    } else if let Some(gpus) = gpu_devices_for_udev.upgrade() {
+                        let to_remove: Option<DrmNode> = gpus
+                            .borrow()
+                            .iter()
+                            .find(|(_, g)| g.dev_id == device_id)
+                            .map(|(node, _)| *node);
+                        if let Some(node) = to_remove {
+                            info!(?node, "Secondary DRM device removed");
+                            gpus.borrow_mut().remove(&node);
+                            outputs_dirty_for_udev.set(true);
+                        }
+                    }
                 }
-                UdevEvent::Removed { device_id } if device_id == primary_id => {
-                    warn!("Primary DRM device removed; ending session");
-                    state.running.store(false, Ordering::SeqCst);
-                }
-                _ => {}
             },
         )
         .map_err(|e| anyhow::anyhow!("Failed to register udev monitor: {:?}", e))?;
@@ -654,8 +876,12 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
                 .iter()
                 .filter(|output| !output.screen_off && !output.frame_queued)
                 .map(|output| {
-                    if output.pending_submission.is_some() {
-                        Duration::from_millis(1)
+                    if let Some(pending) = output.pending_submission.as_ref() {
+                        if !pending.queue_failed {
+                            Duration::from_millis(1)
+                        } else {
+                            Duration::from_millis(50)
+                        }
                     } else {
                         output
                             .frame_interval()
@@ -681,14 +907,8 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
             }
         }
 
-        if !active.get()
-            || outputs.borrow().iter().all(|output| {
-                output.screen_off || (!output.frame_queued && output.pending_submission.is_none())
-            })
-        {
-            if let Some(heartbeat) = heartbeat.as_mut() {
-                heartbeat.beat();
-            }
+        if let Some(heartbeat) = heartbeat.as_mut() {
+            heartbeat.beat();
         }
         let mut resumed = false;
         while resumed_rx.try_recv().is_ok() {
@@ -730,15 +950,39 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
         state.tick();
         if active.get() && outputs_dirty.replace(false) {
             mark(heartbeat.as_ref(), Phase::OutputConfiguration);
-            outputs::reconcile_outputs(
-                &mut output_manager.borrow_mut(),
-                &display,
-                &mut state,
-                &mut renderer,
-                &mut outputs.borrow_mut(),
-                &mut retired_globals,
-                &config.get_display(),
-            );
+            for (node, gpu) in gpu_devices.borrow().iter() {
+                outputs::reconcile_outputs(
+                    *node,
+                    gpu.is_primary,
+                    &mut gpu.output_manager.borrow_mut(),
+                    &display,
+                    &mut state,
+                    &mut renderer,
+                    &mut outputs.borrow_mut(),
+                    &mut retired_globals,
+                    &config.get_display(),
+                );
+            }
+            outputs.borrow_mut().retain(|attached| {
+                if !gpu_devices.borrow().contains_key(&attached.node) {
+                    info!(
+                        output = %attached.output.name(),
+                        node = ?attached.node,
+                        "GPU removed, detaching output"
+                    );
+                    state.detach_output(&attached.output);
+                    display
+                        .handle()
+                        .disable_global::<RixState>(attached.global.clone());
+                    retired_globals.push((
+                        Instant::now() + Duration::from_secs(5),
+                        attached.global.clone(),
+                    ));
+                    false
+                } else {
+                    true
+                }
+            });
             state
                 .screencopy
                 .prune(&state.space.outputs().cloned().collect::<Vec<_>>());
@@ -869,7 +1113,7 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
         output_control.tick(
             &mut state,
             &mut outputs.borrow_mut(),
-            &output_manager.borrow(),
+            &gpu_devices.borrow(),
             active.get(),
         );
 
@@ -930,9 +1174,13 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
                     if output.frame_queued || output.pending_submission.is_some() {
                         pending_mode = Some(command);
                     } else {
-                        let result =
-                            outputs::apply_mode(&output_manager.borrow(), output, &command)
-                                .map_err(|error| error.to_string());
+                        let gpus = gpu_devices.borrow();
+                        let result = if let Some(gpu) = gpus.get(&output.node) {
+                            outputs::apply_mode(&gpu.output_manager.borrow(), output, &command)
+                                .map_err(|error| error.to_string())
+                        } else {
+                            Err("GPU device for output not found".into())
+                        };
                         if result.is_ok() {
                             outputs::arrange_outputs(&mut state, &connected);
                         }
@@ -1007,10 +1255,15 @@ pub fn run_drm(socket_name: &str, greeter_command: Option<&std::path::Path>) -> 
                         now.saturating_duration_since(pending.prepared_at)
                             > crate::presentation::STALL_TIMEOUT
                     });
-                if stalled && output.recovery.attempt(Instant::now()) {
-                    mark(heartbeat.as_ref(), Phase::OutputRecovery);
-                    warn!(output = %output.output.name(), "Recovering stalled output while preserving scanout");
-                    recover_output(output);
+                if stalled {
+                    if output.recovery.attempt(now) {
+                        mark(heartbeat.as_ref(), Phase::OutputRecovery);
+                        warn!(output = %output.output.name(), "Recovering stalled output while preserving scanout");
+                        recover_output(output);
+                    } else if output.pending_submission.as_ref().is_some_and(|p| p.queue_failed) {
+                        output.pending_submission = None;
+                        output.last_render = now;
+                    }
                 }
                 if !output.submission_barrier.can_submit() {
                     continue;
@@ -1201,7 +1454,7 @@ fn render_output(
             );
         }
     }
-    let frame_flags = if fullscreen_fast_path && dim_level == 0. {
+    let frame_flags = if fullscreen_fast_path && dim_level == 0. && connected.is_primary {
         FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY
     } else {
         FrameFlags::DEFAULT

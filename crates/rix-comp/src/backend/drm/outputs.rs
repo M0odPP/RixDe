@@ -87,6 +87,8 @@ pub(super) fn apply_profile(
 }
 
 pub(super) fn reconcile_outputs(
+    node: DrmNode,
+    is_primary: bool,
     manager: &mut DrmOutputManager<
         GbmAllocator<DrmDeviceFd>,
         GbmFramebufferExporter<DrmDeviceFd>,
@@ -123,13 +125,16 @@ pub(super) fn reconcile_outputs(
         .collect();
     let mut changed = false;
     outputs.retain(|attached| {
+        if attached.node != node {
+            return true;
+        }
         let removed = !resources.connectors().contains(&attached.connector)
             || probes.iter().any(|probe| {
                 probe.handle() == attached.connector
                     && probe.state() == connector::State::Disconnected
             });
         if removed {
-            info!(output = %attached.output.name(), "Output disconnected");
+            info!(output = %attached.output.name(), ?node, "Output disconnected");
             state.detach_output(&attached.output);
             display
                 .handle()
@@ -142,7 +147,11 @@ pub(super) fn reconcile_outputs(
         }
         !removed
     });
-    let mut used_crtcs: HashSet<_> = outputs.iter().map(|output| output.crtc).collect();
+    let mut used_crtcs: HashSet<_> = outputs
+        .iter()
+        .filter(|output| output.node == node)
+        .map(|output| output.crtc)
+        .collect();
     let mut x_offset: i32 = outputs
         .iter()
         .filter_map(|o| state.space.output_geometry(&o.output))
@@ -154,7 +163,7 @@ pub(super) fn reconcile_outputs(
         if conn_info.state() != connector::State::Connected
             || outputs
                 .iter()
-                .any(|output| output.connector == conn_info.handle())
+                .any(|output| output.node == node && output.connector == conn_info.handle())
         {
             continue;
         }
@@ -288,6 +297,8 @@ pub(super) fn reconcile_outputs(
 
         x_offset += width as i32;
         let mut connected = ConnectedOutput {
+            node,
+            is_primary,
             output,
             connector: conn_info.handle(),
             global,

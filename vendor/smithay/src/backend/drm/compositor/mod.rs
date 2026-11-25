@@ -2534,14 +2534,21 @@ where
         } = self.queued_frame.take().unwrap();
 
         let allow_partial_update = prepared_frame.kind == PreparedFrameKind::Partial;
-        let flip = if self.surface.commit_pending() {
+        let flip = if self.surface.commit_pending() || self.reset_pending {
             prepared_frame
                 .frame
                 .commit(&self.surface, self.supports_fencing, allow_partial_update, true)
         } else {
-            prepared_frame
+            let res = prepared_frame
                 .frame
-                .page_flip(&self.surface, self.supports_fencing, allow_partial_update, true)
+                .page_flip(&self.surface, self.supports_fencing, allow_partial_update, true);
+            if res.is_err() {
+                prepared_frame
+                    .frame
+                    .commit(&self.surface, self.supports_fencing, allow_partial_update, true)
+            } else {
+                res
+            }
         };
 
         self.handle_flip(prepared_frame, Some(user_data), flip)

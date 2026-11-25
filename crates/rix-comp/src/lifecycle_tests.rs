@@ -65,6 +65,7 @@ struct Events {
     toplevel_size: (i32, i32),
     fullscreen: bool,
     maximized: bool,
+    activated_configures: Vec<(wayland_client::backend::ObjectId, bool)>,
     legacy_modes: Vec<legacy_decoration::Mode>,
     close_requests: usize,
     startup_scale_events: Vec<startup_scale_tests::StartupScaleEvent>,
@@ -127,7 +128,7 @@ wayland_client::delegate_noop!(Events: ignore wp_viewport::WpViewport);
 impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Events {
     fn event(
         state: &mut Self,
-        _: &xdg_toplevel::XdgToplevel,
+        toplevel: &xdg_toplevel::XdgToplevel,
         event: xdg_toplevel::Event,
         _: &(),
         _: &Connection,
@@ -151,6 +152,13 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Events {
                 u32::from_ne_bytes(bytes.try_into().unwrap())
                     == xdg_toplevel::State::Maximized as u32
             });
+            let activated = states.chunks_exact(4).any(|bytes| {
+                u32::from_ne_bytes(bytes.try_into().unwrap())
+                    == xdg_toplevel::State::Activated as u32
+            });
+            state
+                .activated_configures
+                .push((wayland_client::Proxy::id(toplevel), activated));
         }
     }
 }
@@ -2331,4 +2339,81 @@ fn expired_placement_waits_for_the_active_move_grab_to_finish() {
     });
     window.0.commit();
     desktop.roundtrip();
+}
+
+#[test]
+fn mapping_and_focusing_windows_sends_activation_configures_over_wayland() {
+    use wayland_client::Proxy;
+
+    let mut desktop = TestDesktop::new();
+    let first = desktop.window("First window");
+    let first_id = first.2.id();
+    let first_states: Vec<bool> = desktop
+        .events
+        .activated_configures
+        .iter()
+        .filter(|(id, _)| *id == first_id)
+        .map(|(_, active)| *active)
+        .collect();
+    assert_eq!(
+        first_states,
+        vec![false, true],
+        "Initial map must deliver an Activated configure to the client"
+    );
+
+    desktop.events.activated_configures.clear();
+    let second = desktop.window("Second window");
+    let second_id = second.2.id();
+    assert!(
+        desktop
+            .events
+            .activated_configures
+            .contains(&(first_id.clone(), false)),
+        "Mapping a second window must deactivate the first window over Wayland"
+    );
+    assert_eq!(
+        desktop
+            .events
+            .activated_configures
+            .iter()
+            .filter(|(id, _)| *id == second_id)
+            .map(|(_, active)| *active)
+            .collect::<Vec<_>>(),
+        vec![false, true],
+        "Mapping a second window must deliver an Activated configure to the second window"
+    );
+
+    desktop.events.activated_configures.clear();
+    desktop.inspect(|state| {
+        let first_window = state.windows.entries[0].1.clone();
+        state.focus_window(&first_window);
+    });
+    desktop.roundtrip();
+    assert!(
+        desktop
+            .events
+            .activated_configures
+            .contains(&(second_id.clone(), false)),
+        "Refocusing the first window must deactivate the second over Wayland"
+    );
+    assert!(
+        desktop
+            .events
+            .activated_configures
+            .contains(&(first_id.clone(), true)),
+        "Refocusing the first window must reactivate it over Wayland"
+    );
+
+    desktop.events.activated_configures.clear();
+    desktop.inspect(|state| {
+        let first_window = state.windows.entries[0].1.clone();
+        state.focus_window(&first_window);
+    });
+    desktop.roundtrip();
+    assert!(
+        desktop.events.activated_configures.is_empty(),
+        "Refocusing the already active window must not emit redundant configures"
+    );
+
+    drop((first, second));
 }

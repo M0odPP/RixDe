@@ -416,10 +416,13 @@ fn executable(name: &str) -> bool {
 }
 
 fn publish_activation_environment(socket: &str, language: &str) {
-    if std::env::var("RIX_SESSION_BUS_ISOLATED").as_deref() != Ok("1") {
+    if std::env::var("RIX_SESSION_BUS_ISOLATED").as_deref() != Ok("1")
+        && std::env::var("RIX_NATIVE_SESSION").as_deref() != Ok("1")
+    {
         return;
     }
     let mut command = Command::new("dbus-update-activation-environment");
+    command.arg("--systemd");
     command.env("WAYLAND_DISPLAY", socket);
     let mut variables = vec![format!("WAYLAND_DISPLAY={socket}")];
     variables.extend(
@@ -439,28 +442,49 @@ fn publish_activation_environment(socket: &str, language: &str) {
         variables.push(format!("{name}={value}"));
     }
     let child = command
-        .args(variables)
+        .args(&variables)
         .stdin(std::process::Stdio::null())
         .spawn();
-    let Ok(mut child) = child else {
-        warn!("Could not update session bus activation environment");
-        return;
-    };
-    let deadline = Instant::now() + Duration::from_secs(2);
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                if !status.success() {
-                    warn!(%status, "Activation environment update failed");
+    if let Ok(mut child) = child {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    if !status.success() {
+                        warn!(%status, "Activation environment update failed");
+                    }
+                    break;
                 }
-                break;
+                Ok(None) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(5))
+                }
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    warn!("Activation environment update timed out");
+                    break;
+                }
             }
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                warn!("Activation environment update timed out");
-                break;
+        }
+    } else {
+        warn!("Could not update session bus activation environment");
+    }
+    let mut systemctl = Command::new("systemctl");
+    systemctl.arg("--user").arg("import-environment");
+    systemctl.args(&variables);
+    if let Ok(mut child) = systemctl.stdin(std::process::Stdio::null()).spawn() {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(5))
+                }
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break;
+                }
             }
         }
     }
