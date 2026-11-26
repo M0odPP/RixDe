@@ -1,6 +1,5 @@
 target/
 /.qa/
-/docs/screenshots/
 *.log
 *.tmp
 *.swp
