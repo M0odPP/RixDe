@@ -190,7 +190,7 @@ component AudioDevice inherits Rectangle {
     in property <AudioRow> entry;
     height: 96px;
     vertical-stretch: 0;
-    background: entry.preferred ? Theme.surface-active.with-alpha(0.55) : Theme.control-surface;
+    background: entry.preferred ? Theme.surface-active : Theme.control-surface;
     border-width: 1px; border-color: entry.preferred ? Theme.accent.with-alpha(0.35) : Theme.control-border;
     border-radius: 8px;
     VerticalLayout {
@@ -515,7 +515,7 @@ export component NetworkView inherits Rectangle {
                     }
                     for row in (root.full-mode && root.tab == 1 ? SystemState.network-profiles : SystemState.networks): Rectangle {
                         height: details.preferred-height; vertical-stretch: 0;
-                        background: row.active ? Theme.surface-active.with-alpha(0.55) : Theme.control-surface;
+                        background: row.active ? Theme.surface-active : Theme.control-surface;
                         border-width: 1px; border-color: row.active ? Theme.accent.with-alpha(0.35) : Theme.control-border; border-radius: 8px;
                         details := VerticalLayout {
                             padding: 12px; spacing: 10px;
